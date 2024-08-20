@@ -42,6 +42,8 @@ impl Name {
 pub enum TypeValue {
     Void,
 
+    Bool,
+
     I8,
     I16,
     I32,
@@ -78,13 +80,26 @@ impl Type {
     }
 }
 
+#[derive(Debug)]
 pub struct FuncNode {
-    name: Name,
-    args: Vec<(Name, Type)>,
-    return_type: Type,
+    pub name: Name,
+    pub args: Vec<String>,
+    pub return_type: Type,
 
     pub location: Location,
-    pub errors: ParseError,
+    pub errors: Vec<ParseError>,
+}
+
+impl FuncNode {
+    pub fn default() -> Self {
+        Self {
+            name: Name::new(vec![], Location::default()),
+            args: vec![],
+            return_type: Type::default(),
+            location: Location::default(),
+            errors: vec![],
+        }
+    }
 }
 
 pub enum VarLhs {
@@ -98,12 +113,15 @@ impl VarLhs {
     }
 }
 
+#[derive(Debug)]
 pub enum Expr {
     Void,
 
     Int(i128, Location),
     Uint(u128, Location),
     Float(f64, Location),
+
+    Neg(Box<Expr>, Location),
 
     Identifier(Name, Location),
     FuncCall(Name, Vec<Expr>, Location),
@@ -114,6 +132,8 @@ pub enum Expr {
 
     Mul(Box<Expr>, Box<Expr>, Location),
     Div(Box<Expr>, Box<Expr>, Location),
+
+    Power(Box<Expr>, Box<Expr>, Location),
 
     Paren(Box<Expr>, Location),
 }
@@ -139,4 +159,9 @@ impl Var {
             errors: vec![],
         }
     }
+}
+
+#[derive(Debug)]
+pub struct Module {
+    pub name: String,
 }
