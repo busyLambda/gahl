@@ -4,7 +4,7 @@ use crate::{
     parser::error::ParseError,
 };
 
-use super::{error::ParseResult, Input, _type::_type};
+use super::{error::ParseResult, Input, _type::_type, expr::expr};
 
 pub fn var(input: &mut Input) -> (Var, bool) {
     let mut product = Var::default();
@@ -31,14 +31,26 @@ pub fn var(input: &mut Input) -> (Var, bool) {
         }
         Some(t) if t.kind() == TK::Eq => {
             input.eat();
-            (product, false)
+
+            let (rhs, mut errors, is_eof) = expr(input);
+
+            product.errors.append(&mut errors);
+            product.rhs = rhs;
+
+            (product, is_eof)
         }
         Some(t) if t.kind() == TK::Coleq => {
             input.eat();
             product.is_decl = true;
-            (product, false)
+
+            let (rhs, mut errors, is_eof) = expr(input);
+
+            product.errors.append(&mut errors);
+            product.rhs = rhs;
+
+            (product, is_eof)
         }
-        Some(t) => todo!(),
+        Some(_) => todo!(),
         _ => todo!(),
     }
 
@@ -47,7 +59,7 @@ pub fn var(input: &mut Input) -> (Var, bool) {
 
 #[test]
 fn test_var_parser() {
-    let input = "(hello, asd) :=";
+    let input = "{users, summary} := (50 * 2) / 5";
     let mut lexer = Lexer::new(input);
     let tokens = lexer.lex();
     let mut input = Input::new(tokens);
@@ -57,20 +69,19 @@ fn test_var_parser() {
     assert_eq!(is_eof, false);
 }
 
-// "(" ( ~ (ident ~ ",")* ~ ident ~ ) ~ ")"
 pub fn var_lhs(input: &mut Input) -> ParseResult<VarLhs> {
     let (first_kind, first_pos, first_row) = match input.peek() {
         Some(t) => (t.kind(), t.pos(), t.row_col().0),
         None => todo!(),
     };
 
-    if first_kind == TK::OpenParen {
+    if first_kind == TK::OpenCurly {
         input.eat();
 
         let (product, mut errors, _is_eof) = separated_identifiers(input);
 
         return match input.peek() {
-            Some(t) if t.kind() == TK::ClosedParen => {
+            Some(t) if t.kind() == TK::ClosedCurly => {
                 input.eat();
                 (VarLhs::Tuple(product), errors, false)
             }
