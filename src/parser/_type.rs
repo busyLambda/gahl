@@ -19,6 +19,14 @@ pub fn _type(input: &mut Input) -> ParseResult<Type> {
     };
 
     let tv = match first_kind {
+        TK::Tvoid => {
+            input.eat();
+            TypeValue::Void
+        }
+        TK::Tbool => {
+            input.eat();
+            TypeValue::Bool
+        }
         TK::Ti8 => {
             input.eat();
             TypeValue::I8
@@ -146,7 +154,7 @@ pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
 
 #[test]
 fn test_function_type_parser() {
-    let input = "fn (i32 i32) i32";
+    let input = "fn (i32) void";
     let mut lexer = Lexer::new(input);
     let tokens = lexer.lex();
     let mut input = Input::new(tokens);
