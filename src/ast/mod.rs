@@ -1,9 +1,11 @@
-use std::ops::Range;
+use std::{collections::HashMap, ops::Range};
 
 use crate::parser::error::ParseError;
 
+#[derive(Debug)]
 pub enum Stmt {
-    Func(FuncNode),
+    Expr(Expr, Vec<ParseError>),
+    Var(Var),
 }
 
 #[derive(Debug)]
@@ -38,7 +40,7 @@ impl Name {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum TypeValue {
     Void,
 
@@ -85,6 +87,7 @@ pub struct FuncNode {
     pub name: Name,
     pub args: Vec<String>,
     pub return_type: Type,
+    pub block: Vec<Stmt>,
 
     pub location: Location,
     pub errors: Vec<ParseError>,
@@ -96,12 +99,15 @@ impl FuncNode {
             name: Name::new(vec![], Location::default()),
             args: vec![],
             return_type: Type::default(),
+            block: vec![],
+
             location: Location::default(),
             errors: vec![],
         }
     }
 }
 
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub enum VarLhs {
     Tuple(Vec<String>),
     Name(String),
@@ -138,6 +144,7 @@ pub enum Expr {
     Paren(Box<Expr>, Location),
 }
 
+#[derive(Debug)]
 pub struct Var {
     pub lhs: VarLhs,
     pub _type: Type,
@@ -164,4 +171,6 @@ impl Var {
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
+    pub fn_decls: HashMap<String, Type>,
+    pub fn_defns: HashMap<VarLhs, FuncNode>,
 }
