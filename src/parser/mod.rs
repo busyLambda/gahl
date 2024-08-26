@@ -1,15 +1,22 @@
-use std::ops::Range;
+use std::{borrow::Borrow, collections::HashMap, ops::Range};
 
 use error::ParseError;
+use stmt::stmt;
 
-use crate::{ast::Location, lexer::token::{Token, TokenKind}};
+use crate::{
+    ast::{Expr, FuncNode, Location, Module, Stmt, Type, TypeValue, VarLhs},
+    lexer::{
+        token::{Token, TokenKind},
+        Lexer,
+    },
+};
 
 pub mod _type;
 pub mod error;
+pub mod expr;
 pub mod name;
 pub mod stmt;
 pub mod var;
-pub mod expr;
 
 pub struct Input {
     stream: Vec<Token>,
@@ -89,12 +96,15 @@ impl Input {
             }
         };
 
+        println!("GOT PATTERN: {:?}", found);
+
         let mut i = 0;
         loop {
-            if i >= pattern.len() - 1 {
+            if i > pattern.len() - 1 {
                 break;
             }
 
+            println!("found: {:?}, want: {:?}", found[i].kind(), pattern[i]);
             if found[i].kind() != pattern[i] {
                 return false;
             }
@@ -153,18 +163,103 @@ impl Input {
         loop {
             for pattern in &patterns {
                 match self.peek() {
-                    Some(t) if &t.kind() == &pattern[0] => if self.match_pattern_ref(pattern) {
-                        return self.eat_x(pattern.len())
-                    },
+                    Some(t) if &t.kind() == &pattern[0] => {
+                        if self.match_pattern_ref(pattern) {
+                            return self.eat_x(pattern.len());
+                        }
+                    }
                     None => return None,
                     _ => todo!(),
                 }
-
             }
 
             self.eat();
         }
-        
+
         todo!()
+    }
+}
+
+pub fn module(input: &mut Input, name: String) -> Module {
+    let mut fn_decls = HashMap::<String, Type>::new();
+    let mut fn_defns = HashMap::<VarLhs, FuncNode>::new();
+
+    loop {
+        let (stmt, is_eof) = match stmt(input) {
+            Some(res) => res,
+            None => break,
+        };
+
+        let is_func_def = |var_rhs: &Expr| {
+            if let Expr::Func(_) = var_rhs {
+                true
+            } else {
+                false
+            }
+        };
+
+        let is_func_decl = |var_type: &Type| {
+            if let TypeValue::Func(_, _) = var_type.type_value {
+                true
+            } else {
+                false
+            }
+        };
+
+        match stmt {
+            Stmt::Var(var) if is_func_def(&var.rhs) => {
+                if let Expr::Func(fn_node) = var.rhs {
+                    fn_defns.insert(var.lhs, fn_node);
+                }
+            }
+            Stmt::Var(var) if is_func_decl(&var._type) => {
+                if let VarLhs::Name(name) = var.lhs {
+                    fn_decls.insert(name, var._type);
+                } else {
+                    todo!()
+                }
+            }
+            _ => continue,
+        };
+
+        if is_eof {
+            // TODO: Report error
+            break;
+        }
+    }
+
+    Module {
+        name,
+        fn_decls,
+        fn_defns,
+    }
+}
+
+#[test]
+fn test_module_parser() {
+    let input = "\
+    transform : fn(i32) i32 \
+    transform = fn(x) { \
+        5 + x \
+    } \
+    \
+    add : fn(i32 i32) i32 \
+    add = fn(a b) { \
+        a + b \
+    } \
+    ";
+    let mut lexer = Lexer::new(input);
+    let tokens = lexer.lex();
+    let mut input = Input::new(tokens);
+    let module = module(&mut input, String::from("main.gh"));
+
+    println!("function declarations:\n");
+    for (k, v) in module.fn_decls {
+        println!("{} : {:?}", k, v);
+    }
+
+    println!("function definitions:\n");
+    for (k, v) in module.fn_defns {
+        println!("{:?} : {:?}", k, v);
     }
 }

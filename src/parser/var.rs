@@ -4,7 +4,12 @@ use crate::{
     parser::error::ParseError,
 };
 
-use super::{error::ParseResult, Input, _type::_type, expr::expr};
+use super::{
+    error::ParseResult,
+    Input,
+    _type::_type,
+    expr::{expr, expression},
+};
 
 pub fn var(input: &mut Input) -> (Var, bool) {
     let mut product = Var::default();
@@ -32,7 +37,7 @@ pub fn var(input: &mut Input) -> (Var, bool) {
         Some(t) if t.kind() == TK::Eq => {
             input.eat();
 
-            let (rhs, mut errors, is_eof) = expr(input);
+            let (rhs, mut errors, is_eof) = expression(input);
 
             product.errors.append(&mut errors);
             product.rhs = rhs;
@@ -43,7 +48,7 @@ pub fn var(input: &mut Input) -> (Var, bool) {
             input.eat();
             product.is_decl = true;
 
-            let (rhs, mut errors, is_eof) = expr(input);
+            let (rhs, mut errors, is_eof) = expression(input);
 
             product.errors.append(&mut errors);
             product.rhs = rhs;
@@ -89,7 +94,6 @@ pub fn var_lhs(input: &mut Input) -> ParseResult<VarLhs> {
                 let span = t.pos();
                 let rows = (t.row_col().0, t.row_col().0);
                 let location = Location::new(span, rows);
-                // TODO: Report what we found.
                 let message = format!("Expected `)` at the end of list.");
                 let error = ParseError::new(message, location);
 
