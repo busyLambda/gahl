@@ -8,10 +8,10 @@ pub enum Stmt {
     Var(Var),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Location {
-    span: Range<usize>,
-    rows: (usize, usize),
+    pub span: Range<usize>,
+    pub rows: (usize, usize),
 }
 
 impl Location {
@@ -29,9 +29,15 @@ impl Location {
 
 #[derive(Debug)]
 pub struct Name {
-    name: Vec<String>,
+    pub name: Vec<String>,
 
     pub location: Location,
+}
+
+pub struct PhantomName {
+    pub name: Vec<String>,
+
+    pub location: Option<Location>,
 }
 
 impl Name {
@@ -40,7 +46,16 @@ impl Name {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+impl PhantomName {
+    pub fn new_single(name: String, location: Option<Location>) -> Self {
+        Self {
+            name: vec![name],
+            location,
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum TypeValue {
     Void,
 
@@ -107,15 +122,19 @@ impl FuncNode {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub enum VarLhs {
-    Tuple(Vec<String>),
-    Name(String),
+#[derive(Debug)]
+pub struct VarLhs {
+    pub name: Vec<String>,
+
+    pub location: Location,
 }
 
 impl VarLhs {
     pub fn default() -> Self {
-        Self::Name(String::new())
+        Self {
+            name: vec![],
+            location: Location::default(),
+        }
     }
 }
 
@@ -142,6 +161,15 @@ pub enum Expr {
     Power(Box<Expr>, Box<Expr>, Location),
 
     Paren(Box<Expr>, Location),
+}
+
+impl Expr {
+    pub fn is_void(&self) -> bool {
+        match self {
+            Expr::Void => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -171,6 +199,6 @@ impl Var {
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
-    pub fn_decls: HashMap<String, Type>,
-    pub fn_defns: HashMap<VarLhs, FuncNode>,
+    pub fn_decls: HashMap<String, (Type, Location)>,
+    pub fn_defns: HashMap<String, (FuncNode, Location)>,
 }
