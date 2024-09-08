@@ -1,0 +1,9 @@
+hia : fn(f32) f32
+hia = fn(a) {}
+
+main : fn() void
+main = fn() {
+    num = 2
+
+    1 + hia(20)
+}
