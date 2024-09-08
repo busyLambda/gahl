@@ -8,9 +8,7 @@ use super::{error::ParseResult, stmt::block, Input};
 
 pub fn primary(input: &mut Input) -> ParseResult<Expr> {
     let (first_kind, start_pos, start_row) = match input.peek() {
-        Some(t) => {
-            (t.kind(), t.pos(), t.row_col().0)
-        }
+        Some(t) => (t.kind(), t.pos(), t.row_col().0),
         None => todo!(),
     };
 
@@ -31,7 +29,24 @@ pub fn primary(input: &mut Input) -> ParseResult<Expr> {
                 (start_row, input.prev_row),
             );
 
-            (Expr::Identifier(name, location), errors, is_eof)
+            match input.peek() {
+                Some(t) if t.kind() == TK::OpenParen => {
+                    input.eat();
+                    let (args, errors, is_eof) = separated_exprs(input);
+
+                    if is_eof {
+                        panic!()
+                    }
+
+                    let call_location = Location::new(
+                        start_pos.start..input.prev_pos.end,
+                        (start_row, input.prev_row),
+                    );
+
+                    (Expr::FuncCall(name, args, call_location), errors, false)
+                }
+                _ => (Expr::Identifier(name, location), errors, is_eof),
+            }
         }
         TK::OpenParen => {
             input.eat();
@@ -74,11 +89,18 @@ pub fn primary(input: &mut Input) -> ParseResult<Expr> {
 
             (Expr::Neg(Box::new(expr), location), errors, is_eof)
         }
-        _ => todo!(),
+        tk => {
+            todo!()
+        }
     }
 }
 
 fn term(input: &mut Input) -> ParseResult<Expr> {
+    let (start_pos, start_row) = match input.peek() {
+        Some(t) => (t.pos(), t.row_col().0),
+        _ => (input.prev_pos.clone(), input.prev_row),
+    };
+
     let (expr, mut errors, is_eof) = factor(input);
     loop {
         let tok = match input.peek() {
@@ -91,8 +113,13 @@ fn term(input: &mut Input) -> ParseResult<Expr> {
                 input.eat();
                 let (rhs, mut lhs_errors, is_eof) = term(input);
                 errors.append(&mut lhs_errors);
+                let location = Location::new(
+                    start_pos.start..input.prev_pos.end,
+                    (start_row, input.prev_row),
+                );
+
                 return (
-                    Expr::Add(Box::new(expr), Box::new(rhs), Location::default()),
+                    Expr::Add(Box::new(expr), Box::new(rhs), location),
                     errors,
                     is_eof,
                 );
@@ -133,6 +160,11 @@ fn term(input: &mut Input) -> ParseResult<Expr> {
 }
 
 pub fn expr(input: &mut Input) -> ParseResult<Expr> {
+    let (start_pos, start_row) = match input.peek() {
+        Some(t) => (t.pos(), t.row_col().0),
+        _ => (input.prev_pos.clone(), input.prev_row),
+    };
+
     let (expr, mut errors, is_eof) = term(input);
 
     loop {
@@ -146,8 +178,14 @@ pub fn expr(input: &mut Input) -> ParseResult<Expr> {
                 input.eat();
                 let (rhs, mut lhs_errors, is_eof) = term(input);
                 errors.append(&mut lhs_errors);
+
+                let location = Location::new(
+                    start_pos.start..input.prev_pos.end,
+                    (start_row, input.prev_row),
+                );
+
                 return (
-                    Expr::Add(Box::new(expr), Box::new(rhs), Location::default()),
+                    Expr::Add(Box::new(expr), Box::new(rhs), location),
                     errors,
                     is_eof,
                 );
@@ -270,6 +308,57 @@ pub fn function_expr(input: &mut Input) -> ParseResult<FuncNode> {
     (product, vec![], false)
 }
 
+fn separated_exprs(input: &mut Input) -> ParseResult<Vec<Expr>> {
+    let mut product: Vec<Expr> = vec![];
+    let mut errors: Vec<ParseError> = vec![];
+
+    let mut is_multi_expr = false;
+
+    loop {
+        match input.peek() {
+            Some(t) if t.kind() == TK::ClosedParen => {
+                input.eat();
+                break;
+            }
+            Some(t) if is_multi_expr && t.kind() == TK::Comma => {
+                input.eat();
+            }
+            Some(t) if is_multi_expr => {
+                // TODO: Report error relating to expecting `)` or `,`
+                todo!()
+            }
+            None => return (product, errors, true),
+            _ => (),
+        }
+        if is_multi_expr {
+            match input.peek() {
+                Some(t) if t.kind() == TK::ClosedParen => {
+                    input.eat();
+                    break;
+                }
+                None => {
+                    // Report error here...
+                    return (product, errors, true);
+                }
+                Some(t) => (),
+            }
+        }
+
+        let (expr, mut expr_errors, is_eof) = expr(input);
+
+        product.push(expr);
+        errors.append(&mut expr_errors);
+
+        if is_eof {
+            return (product, errors, is_eof);
+        }
+
+        is_multi_expr = true;
+    }
+
+    (product, errors, false)
+}
+
 pub fn expression(input: &mut Input) -> ParseResult<Expr> {
     let mut errors: Vec<ParseError> = vec![];
     let mut product = Expr::Void;
@@ -316,6 +405,17 @@ fn test_function_parser() {
 #[test]
 fn test_expr_parser() {
     let input = "(5 * 64) / 2 * 5 + 3 ^ 2";
+    let mut lexer = Lexer::new(input);
+    let tokens = lexer.lex();
+    let mut input = Input::new(tokens);
+
+    let (expr, errors, is_eof) = expr(&mut input);
+    assert_eq!(errors.len(), 0);
+}
+
+#[test]
+fn test_function_call() {
+    let input = "function(b)";
     let mut lexer = Lexer::new(input);
     let tokens = lexer.lex();
     let mut input = Input::new(tokens);

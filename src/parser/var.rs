@@ -64,12 +64,14 @@ pub fn var(input: &mut Input) -> (Var, bool) {
 
 #[test]
 fn test_var_parser() {
-    let input = "{users, summary} := (50 * 2) / 5";
+    // let input = "{a, b} := (50 * 2) / 5";
+    let input = "a := (50 * 2) / 5";
     let mut lexer = Lexer::new(input);
     let tokens = lexer.lex();
     let mut input = Input::new(tokens);
 
     let (var, is_eof) = var(&mut input);
+    var.errors.iter().for_each(|e| println!("{:?}", e));
     assert_eq!(var.errors.len(), 0);
     assert_eq!(is_eof, false);
 }
@@ -85,28 +87,40 @@ pub fn var_lhs(input: &mut Input) -> ParseResult<VarLhs> {
 
         let (product, mut errors, _is_eof) = separated_identifiers(input);
 
+        let mut var_lhs = VarLhs::default();
+        var_lhs.name = vec![input.eat().unwrap().literal()];
+        let location = Location::new(
+            first_pos.start..input.prev_pos.end,
+            (first_row, input.prev_row),
+        );
+        var_lhs.location = location;
+
         return match input.peek() {
             Some(t) if t.kind() == TK::ClosedCurly => {
                 input.eat();
-                (VarLhs::Tuple(product), errors, false)
+                (var_lhs, errors, false)
             }
             Some(t) => {
                 let span = t.pos();
                 let rows = (t.row_col().0, t.row_col().0);
                 let location = Location::new(span, rows);
-                let message = format!("Expected `)` at the end of list.");
+                let message = format!("Expected `}}` at the end of list but found `{:?}`.", t.kind());
                 let error = ParseError::new(message, location);
 
                 errors.push(error);
 
-                (VarLhs::Tuple(product), errors, false)
+                (var_lhs, errors, false)
             }
-            _ => (VarLhs::Tuple(product), errors, true),
+            _ => (var_lhs, errors, true),
         };
     }
 
     if first_kind == TK::Identifier {
-        return (VarLhs::Name(input.eat().unwrap().literal()), vec![], false);
+        let mut var_lhs = VarLhs::default();
+        var_lhs.name = vec![input.eat().unwrap().literal()];
+        let location = Location::new(first_pos, (first_row, first_row));
+        var_lhs.location = location;
+        return (var_lhs, vec![], false);
     }
 
     let mut errors: Vec<ParseError> = vec![];
@@ -119,7 +133,7 @@ pub fn var_lhs(input: &mut Input) -> ParseResult<VarLhs> {
 
     errors.push(error);
 
-    (VarLhs::Name(String::new()), errors, false)
+    (VarLhs::default(), errors, false)
 }
 
 pub fn separated_identifiers(input: &mut Input) -> ParseResult<Vec<String>> {

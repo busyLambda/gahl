@@ -96,15 +96,12 @@ impl Input {
             }
         };
 
-        println!("GOT PATTERN: {:?}", found);
-
         let mut i = 0;
         loop {
             if i > pattern.len() - 1 {
                 break;
             }
 
-            println!("found: {:?}, want: {:?}", found[i].kind(), pattern[i]);
             if found[i].kind() != pattern[i] {
                 return false;
             }
@@ -181,8 +178,8 @@ impl Input {
 }
 
 pub fn module(input: &mut Input, name: String) -> Module {
-    let mut fn_decls = HashMap::<String, Type>::new();
-    let mut fn_defns = HashMap::<VarLhs, FuncNode>::new();
+    let mut fn_decls = HashMap::<String, (Type, Location)>::new();
+    let mut fn_defns = HashMap::<String, (FuncNode, Location)>::new();
 
     loop {
         let (stmt, is_eof) = match stmt(input) {
@@ -209,15 +206,21 @@ pub fn module(input: &mut Input, name: String) -> Module {
         match stmt {
             Stmt::Var(var) if is_func_def(&var.rhs) => {
                 if let Expr::Func(fn_node) = var.rhs {
-                    fn_defns.insert(var.lhs, fn_node);
+                    if var.lhs.name.len() != 1 {
+                        // TODO: Raise error.
+                        continue;
+                    }
+
+                    fn_defns.insert(var.lhs.name[0].clone(), (fn_node, var.lhs.location));
                 }
             }
             Stmt::Var(var) if is_func_decl(&var._type) => {
-                if let VarLhs::Name(name) = var.lhs {
-                    fn_decls.insert(name, var._type);
-                } else {
-                    todo!()
+                if var.lhs.name.len() != 1 {
+                    // TODO: Raise error.
+                    continue;
                 }
+
+                fn_decls.insert(var.lhs.name[0].clone(), (var._type, var.lhs.location));
             }
             _ => continue,
         };
@@ -255,7 +258,7 @@ fn test_module_parser() {
 
     println!("function declarations:\n");
     for (k, v) in module.fn_decls {
-        println!("{} : {:?}", k, v);
+        println!("{:?} : {:?}", k, v);
     }
 
     println!("function definitions:\n");
