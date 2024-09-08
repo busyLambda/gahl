@@ -51,7 +51,6 @@ impl Lexer {
             '@' => TokenKind::At,
             '\n' => {
                 self.inc_row();
-                // TokenKind::NewLine
                 TokenKind::Whitespace
             }
             c if c.is_numeric() => self.integer(),
