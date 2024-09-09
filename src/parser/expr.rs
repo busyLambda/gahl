@@ -128,8 +128,13 @@ fn term(input: &mut Input) -> ParseResult<Expr> {
                 input.eat();
                 let (rhs, mut lhs_errors, is_eof) = term(input);
                 errors.append(&mut lhs_errors);
+                let location = Location::new(
+                    start_pos.start..input.prev_pos.end,
+                    (start_row, input.prev_row),
+                );
+
                 return (
-                    Expr::Min(Box::new(expr), Box::new(rhs), Location::default()),
+                    Expr::Min(Box::new(expr), Box::new(rhs), location),
                     errors,
                     is_eof,
                 );

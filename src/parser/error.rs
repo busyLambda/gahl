@@ -2,8 +2,8 @@ use crate::ast::Location;
 
 #[derive(Debug)]
 pub struct ParseError {
-    message: String,
-    location: Location,
+    pub message: String,
+    pub location: Location,
 }
 
 impl ParseError {
