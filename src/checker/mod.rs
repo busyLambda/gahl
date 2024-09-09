@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::format, fs};
 
-use crate::ast::{Expr, FuncNode, Location, Module, Name, Stmt, Type, TypeValue, Var, VarLhs};
+use crate::{ast::{Expr, FuncNode, Location, Module, Name, Stmt, Type, TypeValue, Var, VarLhs}, parser::error::ParseError};
 
 #[derive(Debug)]
 pub struct CheckError {
@@ -9,8 +9,15 @@ pub struct CheckError {
 }
 
 impl CheckError {
-    pub fn new(location: Location, message: String) -> Self {
+    fn new(location: Location, message: String) -> Self {
         Self { location, message }
+    }
+
+    fn from_parse_error(error: &ParseError) -> Self {
+        Self {
+            location: error.location.clone(),
+            message: error.message.clone(),
+        }
     }
 }
 
@@ -66,13 +73,15 @@ impl<'a> Checker<'a> {
 
                     let offset = start - summation;
                     let repeat = end - start;
+                    let message_offset = (i + 1).to_string().len();
 
                     // TODO: Unfuck this
                     let errstr = format!(
-                        "\x1b[31mError in {}\x1b[0m\n\x1b[34m{} |\x1b[0m {}\n\x1b[34m- | {}\x1b[31m{}\n\x1b[34m{}\x1b[0m\n",
+                        "\x1b[31mError in {}\x1b[0m\n\x1b[34m{} |\x1b[0m {}\n\x1b[34m-{}| {}\x1b[31m{}\n\x1b[34m{}\x1b[0m\n",
                         self.module.name,
                         i + 1,
                         l,
+                        " ".repeat(message_offset),
                         " ".repeat(offset),
                         "~".repeat(repeat),
                         error.message,
@@ -108,6 +117,15 @@ impl<'a> Checker<'a> {
     }
 
     pub fn fn_ty(&mut self, name: &String, func_node: &'a FuncNode, _type: &'a Type) {
+        func_node.errors.iter().for_each(|error| {
+            let check_error = CheckError::from_parse_error(error);
+            self.errors.push(check_error);
+        });
+
+        if func_node.errors.len() > 0 {
+            return;
+        }
+
         self.push_stack();
 
         let stack = self.symbol_stack.last_mut().unwrap();
@@ -152,6 +170,25 @@ impl<'a> Checker<'a> {
                         location: location.clone(),
                         message: format!(
                             "Cannot `{:?} + {:?}` as these types do not match.",
+                            lhs_ty, rhs_ty
+                        ),
+                    };
+
+                    self.errors.push(error);
+                    None
+                } else {
+                    Some(lhs_ty)
+                }
+            }
+            Expr::Min(lhs, rhs, location) => {
+                let lhs_ty = self.expr_ty(lhs)?;
+                let rhs_ty = self.expr_ty(rhs)?;
+
+                if lhs_ty != rhs_ty {
+                    let error = CheckError {
+                        location: location.clone(),
+                        message: format!(
+                            "Cannot `{:?} - {:?}` as these types do not match.",
                             lhs_ty, rhs_ty
                         ),
                     };
@@ -210,7 +247,7 @@ impl<'a> Checker<'a> {
                     let param_name = &func_defn.args[i];
 
                     let error = CheckError::new(
-                        name.location.clone(),
+                        arg.get_location(),
                         format!(
                             "Argument `{}` in call to `{}` is incorrect, expected `{:?}` but found `{:?}`.",
                             param_name, tmp_name, param, arg_ty
