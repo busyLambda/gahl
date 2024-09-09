@@ -164,6 +164,25 @@ pub enum Expr {
 }
 
 impl Expr {
+    pub fn get_location(&self) -> Location {
+        match self {
+            Expr::Void => Location::default(),
+            Expr::Int(_, location) => location.clone(),
+            Expr::Uint(_, location) => location.clone(),
+            Expr::Float(_, location) => location.clone(),
+            Expr::Neg(_, location) => location.clone(),
+            Expr::Identifier(_, location) => location.clone(),
+            Expr::FuncCall(_, _, location) => location.clone(),
+            Expr::Func(func) => func.location.clone(),
+            Expr::Add(_, _, location) => location.clone(),
+            Expr::Min(_, _, location) => location.clone(),
+            Expr::Mul(_, _, location) => location.clone(),
+            Expr::Div(_, _, location) => location.clone(),
+            Expr::Power(_, _, location) => location.clone(),
+            Expr::Paren(_, location) => location.clone(),
+        }
+    }
+
     pub fn is_void(&self) -> bool {
         match self {
             Expr::Void => true,
