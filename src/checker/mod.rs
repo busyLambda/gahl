@@ -1,6 +1,13 @@
-use std::{collections::HashMap, fmt::format, fs};
+use std::{collections::HashMap, fs};
 
-use crate::{ast::{Expr, FuncNode, Location, Module, Name, Stmt, Type, TypeValue, Var, VarLhs}, parser::error::ParseError};
+mod mdir;
+
+use mdir::{Expr as MdIrExpr, Expression, Function, Literal, MiddleIR, Statement, Var as MdIrVar};
+
+use crate::{
+    ast::{Expr, FuncNode, Location, Module, Name, Stmt, Type, TypeValue, Var},
+    parser::error::ParseError,
+};
 
 #[derive(Debug)]
 pub struct CheckError {
@@ -47,7 +54,7 @@ impl<'a> Checker<'a> {
         self.symbol_stack.push(symbols);
     }
 
-    pub fn pop_stack(&mut self) {
+    pub fn pop_stack(&mut self, context: String) {
         self.symbol_stack.pop();
     }
 
@@ -95,11 +102,14 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub fn types(&mut self) {
+    pub fn types(&mut self) -> MiddleIR {
+        let mut middle_ir = MiddleIR::new();
+
         for (name, (func_node, location)) in &self.module.fn_defns {
             match self.module.fn_decls.get(name) {
                 Some((_type, _)) => {
-                    self.fn_ty(name, func_node, _type);
+                    let function = self.fn_ty(name, func_node, _type);
+                    middle_ir.insert_function(function);
                 }
                 None => {
                     let error = CheckError {
@@ -114,16 +124,21 @@ impl<'a> Checker<'a> {
                 }
             }
         }
+
+        middle_ir
     }
 
-    pub fn fn_ty(&mut self, name: &String, func_node: &'a FuncNode, _type: &'a Type) {
+    pub fn fn_ty(&mut self, name: &String, func_node: &'a FuncNode, _type: &'a Type) -> Function {
+        let mut function = Function::default();
+        function.name = name.clone();
+
         func_node.errors.iter().for_each(|error| {
             let check_error = CheckError::from_parse_error(error);
             self.errors.push(check_error);
         });
 
         if func_node.errors.len() > 0 {
-            return;
+            return function;
         }
 
         self.push_stack();
@@ -131,9 +146,13 @@ impl<'a> Checker<'a> {
         let stack = self.symbol_stack.last_mut().unwrap();
 
         if let TypeValue::Func(params, ret_type) = &_type.type_value {
+            function.return_type = *ret_type.clone();
+
             for i in 0..func_node.args.len() {
                 let arg = &func_node.args[i];
                 let _type = params[i].clone();
+
+                function.params.push((arg.clone(), _type.clone()));
 
                 stack.insert(arg, _type);
             }
@@ -142,70 +161,86 @@ impl<'a> Checker<'a> {
         }
 
         func_node.block.iter().for_each(|stmt| {
-            self.stmt_ty(stmt);
+            let stmt = self.stmt_ty(stmt);
+            function.block.push(stmt);
         });
 
-        self.pop_stack();
+        self.pop_stack(name.clone());
+
+        function
     }
 
-    pub fn stmt_ty(&mut self, stmt: &'a Stmt) {
+    pub fn stmt_ty(&mut self, stmt: &'a Stmt) -> Statement {
         match stmt {
-            Stmt::Expr(expr, location) => {
-                self.expr_ty(expr);
-            }
-            Stmt::Var(var) => {
-                self.var_ty(var);
-            }
+            Stmt::Expr(expr, location) => Statement::Expr(self.expr_ty(expr)),
+            Stmt::Var(var) => Statement::Var(self.var_ty(var)),
         }
     }
 
-    pub fn expr_ty(&mut self, expr: &Expr) -> Option<TypeValue> {
+    pub fn expr_ty(&mut self, expr: &Expr) -> Expression {
         match expr {
             Expr::Add(lhs, rhs, location) => {
-                let lhs_ty = self.expr_ty(lhs)?;
-                let rhs_ty = self.expr_ty(rhs)?;
+                let lhs_expr = self.expr_ty(lhs);
+                let rhs_expr = self.expr_ty(rhs);
 
-                if lhs_ty != rhs_ty {
+                // TODO: Maybe just ref?
+                let lhs_type = lhs_expr.ty.clone();
+                let rhs_type = rhs_expr.ty.clone();
+
+                if lhs_type != rhs_type {
                     let error = CheckError {
                         location: location.clone(),
                         message: format!(
                             "Cannot `{:?} + {:?}` as these types do not match.",
-                            lhs_ty, rhs_ty
+                            lhs_type, rhs_type
                         ),
                     };
 
                     self.errors.push(error);
-                    None
+
+                    Expression::default()
                 } else {
-                    Some(lhs_ty)
+                    let expr = MdIrExpr::Add(Box::new(lhs_expr), Box::new(rhs_expr));
+                    Expression::new(lhs_type, expr)
                 }
             }
             Expr::Min(lhs, rhs, location) => {
-                let lhs_ty = self.expr_ty(lhs)?;
-                let rhs_ty = self.expr_ty(rhs)?;
+                let lhs_expr = self.expr_ty(lhs);
+                let rhs_expr = self.expr_ty(rhs);
 
-                if lhs_ty != rhs_ty {
+                let lhs_type = lhs_expr.ty.clone();
+                let rhs_type = rhs_expr.ty.clone();
+
+                if lhs_type != rhs_type {
                     let error = CheckError {
                         location: location.clone(),
                         message: format!(
                             "Cannot `{:?} - {:?}` as these types do not match.",
-                            lhs_ty, rhs_ty
+                            lhs_type, rhs_type
                         ),
                     };
 
                     self.errors.push(error);
-                    None
+
+                    Expression::default()
                 } else {
-                    Some(lhs_ty)
+                    let expr = MdIrExpr::Min(Box::new(lhs_expr), Box::new(rhs_expr));
+                    Expression::new(lhs_type, expr)
                 }
             }
-            Expr::Int(_, _) => Some(TypeValue::I32),
+            Expr::Int(int, _) => Expression::new(
+                TypeValue::I32,
+                MdIrExpr::Literal(Literal::Int(int.to_string())),
+            ),
             Expr::Identifier(ident, location) => {
                 // TODO: Temporary asf.
                 let name = &ident.name[0];
 
                 match self.get_symbol(name) {
-                    Some(ty) => Some(ty.clone()),
+                    Some(ty) => {
+                        let literal = MdIrExpr::Literal(Literal::Identifier(name.clone()));
+                        Expression::new(ty.clone(), literal)
+                    }
                     None => {
                         let error = CheckError {
                             location: location.clone(),
@@ -214,7 +249,8 @@ impl<'a> Checker<'a> {
 
                         self.errors.push(error);
 
-                        None
+                        let literal = MdIrExpr::Literal(Literal::Identifier(name.clone()));
+                        Expression::new(TypeValue::Void, literal)
                     }
                 }
             }
@@ -231,26 +267,31 @@ impl<'a> Checker<'a> {
         name: &Name,
         args: &Vec<Expr>,
         _location: &Location,
-    ) -> Option<TypeValue> {
+    ) -> Expression {
         // TODO: Don't do this weird "Name" shit...
-        let tmp_name = &name.name[0];
+        let tmp_name = name.name[0].clone();
 
-        let (func_decl, _) = self.module.fn_decls.get(tmp_name)?;
-        let (func_defn, _) = self.module.fn_defns.get(tmp_name)?;
+        let (func_decl, _) = self.module.fn_decls.get(&tmp_name).unwrap();
+        let (func_defn, _) = self.module.fn_defns.get(&tmp_name).unwrap();
+
+        let mut mdir_params: Vec<Expression> = vec![];
 
         if let TypeValue::Func(params, ret_ty) = &func_decl.type_value {
             for (i, arg) in args.iter().enumerate() {
                 let param = &params[i];
-                let arg_ty = self.expr_ty(arg)?;
+                let arg_expr = self.expr_ty(arg);
+                let arg_type = arg_expr.ty.clone();
 
-                if param != &arg_ty {
+                mdir_params.push(arg_expr);
+
+                if param != &arg_type {
                     let param_name = &func_defn.args[i];
 
                     let error = CheckError::new(
                         arg.get_location(),
                         format!(
                             "Argument `{}` in call to `{}` is incorrect, expected `{:?}` but found `{:?}`.",
-                            param_name, tmp_name, param, arg_ty
+                            param_name, tmp_name, param, arg_type
                         ),
                     );
 
@@ -258,23 +299,23 @@ impl<'a> Checker<'a> {
                 }
             }
 
-            Some(*ret_ty.clone())
+            let call = MdIrExpr::Call(tmp_name.clone(), mdir_params);
+            Expression::new(*ret_ty.clone(), call)
         } else {
-            None
+            Expression::default()
         }
     }
 
-    pub fn var_ty(&mut self, var: &'a Var) {
+    pub fn var_ty(&mut self, var: &'a Var) -> MdIrVar {
         match () {
             _ if var.is_decl && var.rhs.is_void() => {
                 self.insert_symbol(var.lhs.name.last().unwrap(), var._type.type_value.clone());
             }
             _ if var.is_decl => {
                 // TODO: Do not unwrap here.
-                let rhs_type = match self.expr_ty(&var.rhs) {
-                    Some(ty) => ty,
-                    None => TypeValue::Void,
-                };
+                let rhs_expr = self.expr_ty(&var.rhs);
+                let rhs_type = rhs_expr.ty;
+
                 self.insert_symbol(var.lhs.name.last().unwrap(), rhs_type)
             }
             _ => {
@@ -295,5 +336,7 @@ impl<'a> Checker<'a> {
                 }
             }
         };
+
+        todo!()
     }
 }
