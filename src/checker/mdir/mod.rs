@@ -14,6 +14,10 @@ impl MiddleIR {
         }
     }
 
+    pub fn functions(&self) -> &HashMap<String, Function> {
+        &self.functions
+    }
+
     pub fn insert_function(&mut self, function: Function) {
         self.functions.insert(function.name.clone(), function);
     }
@@ -41,7 +45,7 @@ impl Function {
 #[derive(Debug)]
 pub enum Statement {
     Expr(Expression),
-    Var(Var)
+    Var(Var),
 }
 
 #[derive(Debug)]
@@ -49,6 +53,12 @@ pub struct Var {
     lhs: String,
     rhs: Expression,
     ty: TypeValue,
+}
+
+impl Var {
+    pub fn new(lhs: String, rhs: Expression, ty: TypeValue) -> Self {
+        Self { lhs, rhs, ty }
+    }
 }
 
 #[derive(Debug)]

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs};
 
-mod mdir;
+pub mod mdir;
 
 use mdir::{Expr as MdIrExpr, Expression, Function, Literal, MiddleIR, Statement, Var as MdIrVar};
 
@@ -310,16 +310,22 @@ impl<'a> Checker<'a> {
         match () {
             _ if var.is_decl && var.rhs.is_void() => {
                 self.insert_symbol(var.lhs.name.last().unwrap(), var._type.type_value.clone());
+                todo!()
             }
             _ if var.is_decl => {
                 // TODO: Do not unwrap here.
                 let rhs_expr = self.expr_ty(&var.rhs);
-                let rhs_type = rhs_expr.ty;
+                let rhs_type = rhs_expr.ty.clone();
 
-                self.insert_symbol(var.lhs.name.last().unwrap(), rhs_type)
+                self.insert_symbol(var.lhs.name.last().unwrap(), rhs_type.clone());
+
+                let name = var.lhs.name.last().unwrap().clone();
+                MdIrVar::new(name, rhs_expr, rhs_type)
             }
             _ => {
                 let key = var.lhs.name.last().unwrap();
+                // TODO: Actually make this function do stuff :3
+
                 match self.get_symbol(key) {
                     None => {
                         let error = CheckError {
@@ -333,10 +339,10 @@ impl<'a> Checker<'a> {
                         self.errors.push(error);
                     }
                     _ => (),
-                }
-            }
-        };
+                };
 
-        todo!()
+                todo!()
+            }
+        }
     }
 }
