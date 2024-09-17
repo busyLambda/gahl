@@ -57,6 +57,8 @@ impl PhantomName {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum TypeValue {
+    Undefined,
+
     Void,
 
     Bool,
