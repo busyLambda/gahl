@@ -71,7 +71,6 @@ fn test_var_parser() {
     let mut input = Input::new(tokens);
 
     let (var, is_eof) = var(&mut input);
-    var.errors.iter().for_each(|e| println!("{:?}", e));
     assert_eq!(var.errors.len(), 0);
     assert_eq!(is_eof, false);
 }

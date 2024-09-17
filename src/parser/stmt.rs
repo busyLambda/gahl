@@ -78,6 +78,4 @@ fn test_stmt_parser() {
 
     let (stmt, is_eof) = stmt(&mut input).unwrap();
     assert_eq!(is_eof, false);
-
-    println!("{:?}", stmt);
 }

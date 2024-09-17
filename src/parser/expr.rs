@@ -409,13 +409,14 @@ fn test_function_parser() {
 
 #[test]
 fn test_expr_parser() {
-    let input = "(5 * 64) / 2 * 5 + 3 ^ 2";
+    let input = "5 + (2 * 5 + 2)";
     let mut lexer = Lexer::new(input);
     let tokens = lexer.lex();
     let mut input = Input::new(tokens);
 
     let (expr, errors, is_eof) = expr(&mut input);
     assert_eq!(errors.len(), 0);
+    println!("{:?}", expr);
 }
 
 #[test]

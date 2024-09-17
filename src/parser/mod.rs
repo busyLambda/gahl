@@ -255,14 +255,4 @@ fn test_module_parser() {
     let tokens = lexer.lex();
     let mut input = Input::new(tokens);
     let module = module(&mut input, String::from("main.gh"));
-
-    println!("function declarations:\n");
-    for (k, v) in module.fn_decls {
-        println!("{:?} : {:?}", k, v);
-    }
-
-    println!("function definitions:\n");
-    for (k, v) in module.fn_defns {
-        println!("{:?} : {:?}", k, v);
-    }
 }
