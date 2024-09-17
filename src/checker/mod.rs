@@ -2,7 +2,9 @@ use std::{collections::HashMap, fs};
 
 pub mod mdir;
 
-use mdir::{Expr as MdIrExpr, Expression, Function, Literal, MiddleIR, Statement, Var as MdIrVar};
+use mdir::{
+    shunting_yard_this_mf, Expression, Function, Literal, MiddleIR, Statement, Var as MdIrVar,
+};
 
 use crate::{
     ast::{Expr, FuncNode, Location, Module, Name, Stmt, Type, TypeValue, Var},
@@ -32,7 +34,7 @@ pub struct Checker<'a> {
     errors: Vec<CheckError>,
     warnings: Vec<CheckError>,
     module: &'a Module,
-    symbol_stack: Vec<HashMap<&'a String, TypeValue>>,
+    symbol_stack: Vec<HashMap<&'a String, (TypeValue, bool)>>,
 }
 
 impl<'a> Checker<'a> {
@@ -50,19 +52,19 @@ impl<'a> Checker<'a> {
     }
 
     pub fn push_stack(&mut self) {
-        let symbols: HashMap<&String, TypeValue> = HashMap::new();
+        let symbols: HashMap<&String, (TypeValue, bool)> = HashMap::new();
         self.symbol_stack.push(symbols);
     }
 
-    pub fn pop_stack(&mut self, context: String) {
+    pub fn pop_stack(&mut self) {
         self.symbol_stack.pop();
     }
 
-    pub fn get_symbol(&self, key: &String) -> Option<&TypeValue> {
+    pub fn get_symbol(&self, key: &String) -> Option<&(TypeValue, bool)> {
         self.symbol_stack.last().unwrap().get(key)
     }
 
-    fn insert_symbol(&mut self, key: &'a String, value: TypeValue) {
+    fn insert_symbol(&mut self, key: &'a String, value: (TypeValue, bool)) {
         self.symbol_stack.last_mut().unwrap().insert(key, value);
     }
 
@@ -84,8 +86,10 @@ impl<'a> Checker<'a> {
 
                     // TODO: Unfuck this
                     let errstr = format!(
-                        "\x1b[31mError in {}\x1b[0m\n\x1b[34m{} |\x1b[0m {}\n\x1b[34m-{}| {}\x1b[31m{}\n\x1b[34m{}\x1b[0m\n",
+                        "\x1b[31mError in {}:{}:{}\x1b[0m\n\x1b[34m{} |\x1b[0m {}\n\x1b[34m-{}| {}\x1b[31m{}\n\x1b[34m{}\x1b[0m\n",
                         self.module.name,
+                        i+1,
+                        offset,
                         i + 1,
                         l,
                         " ".repeat(message_offset),
@@ -154,7 +158,7 @@ impl<'a> Checker<'a> {
 
                 function.params.push((arg.clone(), _type.clone()));
 
-                stack.insert(arg, _type);
+                stack.insert(arg, (_type, true));
             }
         } else {
             todo!()
@@ -165,27 +169,43 @@ impl<'a> Checker<'a> {
             function.block.push(stmt);
         });
 
-        self.pop_stack(name.clone());
+        self.pop_stack();
 
         function
     }
 
     pub fn stmt_ty(&mut self, stmt: &'a Stmt) -> Statement {
         match stmt {
-            Stmt::Expr(expr, location) => Statement::Expr(self.expr_ty(expr)),
+            Stmt::Expr(expr, _location) => {
+                let (expr, _) = self.expr_ty(expr);
+                let out = shunting_yard_this_mf(expr);
+
+                Statement::Expr(out)
+            }
             Stmt::Var(var) => Statement::Var(self.var_ty(var)),
         }
     }
 
-    pub fn expr_ty(&mut self, expr: &Expr) -> Expression {
+    pub fn expr_ty(&mut self, expr: &Expr) -> (Vec<Expression>, TypeValue) {
+        let mut output: Vec<Expression> = vec![];
+
         match expr {
             Expr::Add(lhs, rhs, location) => {
-                let lhs_expr = self.expr_ty(lhs);
-                let rhs_expr = self.expr_ty(rhs);
+                let (mut lhs_expr, lhs_type) = self.expr_ty(lhs);
+                let (mut rhs_expr, rhs_type) = self.expr_ty(rhs);
 
-                // TODO: Maybe just ref?
-                let lhs_type = lhs_expr.ty.clone();
-                let rhs_type = rhs_expr.ty.clone();
+                output.append(&mut lhs_expr);
+                output.push(Expression::Add);
+                output.append(&mut rhs_expr);
+
+                // TODO: Also do double check, while this may solve certain scenarios it doesn't solve all.
+                if lhs_type == TypeValue::Undefined {
+                    return (vec![], rhs_type);
+                }
+
+                if rhs_type == TypeValue::Undefined {
+                    return (vec![], lhs_type);
+                }
 
                 if lhs_type != rhs_type {
                     let error = CheckError {
@@ -198,18 +218,18 @@ impl<'a> Checker<'a> {
 
                     self.errors.push(error);
 
-                    Expression::default()
+                    (vec![], lhs_type)
                 } else {
-                    let expr = MdIrExpr::Add(Box::new(lhs_expr), Box::new(rhs_expr));
-                    Expression::new(lhs_type, expr)
+                    (output, lhs_type)
                 }
             }
             Expr::Min(lhs, rhs, location) => {
-                let lhs_expr = self.expr_ty(lhs);
-                let rhs_expr = self.expr_ty(rhs);
+                let (mut lhs_expr, lhs_type) = self.expr_ty(lhs);
+                let (mut rhs_expr, rhs_type) = self.expr_ty(rhs);
 
-                let lhs_type = lhs_expr.ty.clone();
-                let rhs_type = rhs_expr.ty.clone();
+                output.append(&mut lhs_expr);
+                output.push(Expression::Min);
+                output.append(&mut rhs_expr);
 
                 if lhs_type != rhs_type {
                     let error = CheckError {
@@ -222,24 +242,74 @@ impl<'a> Checker<'a> {
 
                     self.errors.push(error);
 
-                    Expression::default()
+                    (vec![], TypeValue::Void)
                 } else {
-                    let expr = MdIrExpr::Min(Box::new(lhs_expr), Box::new(rhs_expr));
-                    Expression::new(lhs_type, expr)
+                    (output, lhs_type)
                 }
             }
-            Expr::Int(int, _) => Expression::new(
-                TypeValue::I32,
-                MdIrExpr::Literal(Literal::Int(int.to_string())),
-            ),
+            Expr::Mul(lhs, rhs, location) => {
+                let (mut lhs_expr, lhs_type) = self.expr_ty(lhs);
+                let (mut rhs_expr, rhs_type) = self.expr_ty(rhs);
+
+                output.append(&mut lhs_expr);
+                output.push(Expression::Mul);
+                output.append(&mut rhs_expr);
+
+                if lhs_type != rhs_type {
+                    let error = CheckError {
+                        location: location.clone(),
+                        message: format!(
+                            "Cannot `{:?} * {:?}` as these types do not match.",
+                            lhs_type, rhs_type
+                        ),
+                    };
+
+                    self.errors.push(error);
+
+                    (vec![], TypeValue::Void)
+                } else {
+                    (output, lhs_type)
+                }
+            }
+            Expr::Div(lhs, rhs, location) => {
+                let (mut lhs_expr, lhs_type) = self.expr_ty(lhs);
+                let (mut rhs_expr, rhs_type) = self.expr_ty(rhs);
+
+                output.append(&mut lhs_expr);
+                output.push(Expression::Div);
+                output.append(&mut rhs_expr);
+
+                if lhs_type != rhs_type {
+                    let error = CheckError {
+                        location: location.clone(),
+                        message: format!(
+                            "Cannot `{:?} / {:?}` as these types do not match.",
+                            lhs_type, rhs_type
+                        ),
+                    };
+
+                    self.errors.push(error);
+
+                    (vec![], TypeValue::Void)
+                } else {
+                    (output, lhs_type)
+                }
+            }
+            Expr::Int(int, _) => {
+                let expr = Expression::Literal(Literal::Int(TypeValue::I32, int.to_string()));
+                (vec![expr], TypeValue::I32)
+            }
             Expr::Identifier(ident, location) => {
                 // TODO: Temporary asf.
                 let name = &ident.name[0];
 
                 match self.get_symbol(name) {
-                    Some(ty) => {
-                        let literal = MdIrExpr::Literal(Literal::Identifier(name.clone()));
-                        Expression::new(ty.clone(), literal)
+                    Some((ty, is_function_param)) => {
+                        let literal =
+                            Literal::Identifier(ty.clone(), name.clone(), *is_function_param);
+                        let expr = Expression::Literal(literal);
+
+                        (vec![expr], ty.clone())
                     }
                     None => {
                         let error = CheckError {
@@ -249,14 +319,13 @@ impl<'a> Checker<'a> {
 
                         self.errors.push(error);
 
-                        let literal = MdIrExpr::Literal(Literal::Identifier(name.clone()));
-                        Expression::new(TypeValue::Void, literal)
+                        (vec![], TypeValue::Undefined)
                     }
                 }
             }
             Expr::FuncCall(name, args, location) => self.func_call_expr_ty(name, args, location),
             e => {
-                println!("Unhandled expression: {:?}", expr);
+                println!("Unhandled expression: {:?}", e);
                 todo!()
             }
         }
@@ -267,7 +336,7 @@ impl<'a> Checker<'a> {
         name: &Name,
         args: &Vec<Expr>,
         _location: &Location,
-    ) -> Expression {
+    ) -> (Vec<Expression>, TypeValue) {
         // TODO: Don't do this weird "Name" shit...
         let tmp_name = name.name[0].clone();
 
@@ -279,10 +348,9 @@ impl<'a> Checker<'a> {
         if let TypeValue::Func(params, ret_ty) = &func_decl.type_value {
             for (i, arg) in args.iter().enumerate() {
                 let param = &params[i];
-                let arg_expr = self.expr_ty(arg);
-                let arg_type = arg_expr.ty.clone();
+                let (mut arg_expr, arg_type) = self.expr_ty(arg);
 
-                mdir_params.push(arg_expr);
+                mdir_params.append(&mut arg_expr);
 
                 if param != &arg_type {
                     let param_name = &func_defn.args[i];
@@ -299,28 +367,36 @@ impl<'a> Checker<'a> {
                 }
             }
 
-            let call = MdIrExpr::Call(tmp_name.clone(), mdir_params);
-            Expression::new(*ret_ty.clone(), call)
+            let call = Expression::Call(*ret_ty.clone(), tmp_name.clone(), mdir_params);
+            (vec![call], *ret_ty.clone())
         } else {
-            Expression::default()
+            (vec![], TypeValue::Void)
         }
     }
 
     pub fn var_ty(&mut self, var: &'a Var) -> MdIrVar {
         match () {
             _ if var.is_decl && var.rhs.is_void() => {
-                self.insert_symbol(var.lhs.name.last().unwrap(), var._type.type_value.clone());
+                self.insert_symbol(
+                    var.lhs.name.last().unwrap(),
+                    (var._type.type_value.clone(), false),
+                );
+
+                let _name = var.lhs.name.last().unwrap().clone();
+                let _ty = var._type.type_value.clone();
+
+                // Decl::new(name, ty);
                 todo!()
             }
             _ if var.is_decl => {
                 // TODO: Do not unwrap here.
-                let rhs_expr = self.expr_ty(&var.rhs);
-                let rhs_type = rhs_expr.ty.clone();
+                let (rhs_expr, rhs_type) = self.expr_ty(&var.rhs);
+                let out = shunting_yard_this_mf(rhs_expr);
 
-                self.insert_symbol(var.lhs.name.last().unwrap(), rhs_type.clone());
+                self.insert_symbol(var.lhs.name.last().unwrap(), (rhs_type.clone(), false));
 
                 let name = var.lhs.name.last().unwrap().clone();
-                MdIrVar::new(name, rhs_expr, rhs_type)
+                MdIrVar::new(name, out, rhs_type)
             }
             _ => {
                 let key = var.lhs.name.last().unwrap();
