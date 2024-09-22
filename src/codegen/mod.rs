@@ -117,6 +117,59 @@ fn function_block_to_llvm_ir(
     result
 }
 
+// fn -> (intermediate_ir, ir, is_final)
+fn literal_to_llvm_ir(
+    literal: &Literal,
+    context: &String,
+    i: usize,
+    _type: &TypeValue,
+    type_values: bool,
+) -> (String, String, bool) {
+    let mut result = String::new();
+    let mut ir = String::new();
+    let mut is_final = false;
+
+    match literal {
+        Literal::Int(_ty, int) => {
+            let _ty = type_value_to_llvm_ir(_type);
+            ir += &format!("{int}");
+            is_final = true;
+        }
+        Literal::Identifier(ty, value, false) => {
+            let param_name = format!("%{value}_load");
+            let ty = type_value_to_llvm_ir(ty);
+            result += &format!("    {param_name} = load {ty}, {ty}* %{value}\n");
+            ir = param_name;
+            is_final = true;
+        }
+        Literal::Identifier(_ty, value, true) => {
+            ir = format!("%{}", value);
+            is_final = true;
+        }
+        Literal::Call(ret_ty, name, args) => {
+            let ret_ty_ir = type_value_to_llvm_ir(ret_ty);
+
+            let args_ir = args
+                .iter()
+                .map(|arg| {
+                    let (arg_ir, arg_name) = expr_to_llvm_ir(arg, context);
+                    result += &arg_ir;
+                    format!("i32 {}", arg_name.unwrap())
+                })
+                .collect::<Vec<String>>()
+                .join(", ");
+
+            let call_name = format!("%{context}_call_{i}");
+            result += &format!("    {call_name} = call {ret_ty_ir} @{name}({args_ir})\n");
+            ir = call_name;
+            is_final = true;
+        }
+        _ => todo!(),
+    }
+
+    (result, ir, is_final)
+}
+
 fn expr_to_llvm_ir(expr: &VecDeque<Expression>, context: &String) -> (String, Option<String>) {
     let mut result = String::new();
     let mut prev_name: Option<String> = None;
@@ -124,8 +177,21 @@ fn expr_to_llvm_ir(expr: &VecDeque<Expression>, context: &String) -> (String, Op
     let mut expr_stack: Vec<&Expression> = vec![];
 
     if expr.len() == 1 {
-        if let Expression::Literal(lit) = &expr[0] {
-            return (lit.to_string(), None);
+        if let Expression::Literal(rhs) = &expr[0] {
+            let i = 0;
+            let final_name = format!("%{}_expr_{}", context, i);
+
+            let (in_ir, expr_ir, is_final) =
+                literal_to_llvm_ir(rhs, context, 0, rhs._type(), false);
+
+            result += &in_ir;
+            if is_final {
+                return (result, Some(expr_ir));
+            }
+            result += &format!("    {} = {}\n", final_name, expr_ir,);
+            prev_name = Some(final_name);
+
+            return (result, prev_name);
         }
     }
 
@@ -142,33 +208,16 @@ fn expr_to_llvm_ir(expr: &VecDeque<Expression>, context: &String) -> (String, Op
                     let final_name = format!("%{}_expr_{}", context, i);
                     i += 1;
                     let _type = type_value_to_llvm_ir(lhs._type());
+                    let lhs_type = lhs._type();
+                    let rhs_type = rhs._type();
 
-                    let rhs_ir: String;
-                    match rhs {
-                        Literal::Identifier(_, value, false) => {
-                            let param_name = format!("%{value}_load");
-                            result += &format!("    {param_name} = ");
-                            rhs_ir = param_name;
-                        }
-                        _ => {
-                            rhs_ir = rhs.to_string();
-                        }
-                    }
+                    let (in_ir, rhs_ir, _is_final) =
+                        literal_to_llvm_ir(rhs, context, i, rhs_type, false);
+                    result += &in_ir;
 
-                    let lhs_ir: String;
-                    match lhs {
-                        Literal::Identifier(ty, value, false) => {
-                            result += "    ; Load\n";
-                            let _type = type_value_to_llvm_ir(ty);
-                            let param_name = format!("%{value}_load");
-                            result +=
-                                &format!("    {param_name} = load {_type}, {_type}* %{value}\n");
-                            lhs_ir = param_name;
-                        }
-                        _ => {
-                            lhs_ir = lhs.to_string();
-                        }
-                    }
+                    let (in_ir, lhs_ir, _is_final) =
+                        literal_to_llvm_ir(lhs, context, i, lhs_type, false);
+                    result += &in_ir;
 
                     result += &format!(
                         "    {} = {e} {} {}, {}\n",
@@ -184,12 +233,18 @@ fn expr_to_llvm_ir(expr: &VecDeque<Expression>, context: &String) -> (String, Op
                 if let E::Literal(rhs) = rhs {
                     let final_name = format!("%{}_expr_{}", context, i);
                     i += 1;
+                    let rhs_type = rhs._type();
+                    let _type = type_value_to_llvm_ir(rhs_type);
+
+                    let (in_ir, rhs_ir, _is_final) = literal_to_llvm_ir(rhs, context, i, rhs_type, false);
+                    result += &in_ir;
 
                     result += &format!(
-                        "    {} = add i32 {}, {}\n",
+                        "    {} = {} i32 {}, {}\n",
                         final_name,
+                        e.to_string(),
                         prev_name.unwrap(),
-                        rhs.to_string()
+                        rhs_ir,
                     );
                     prev_name = Some(final_name);
                 }
