@@ -4,7 +4,7 @@ use error::ParseError;
 use stmt::stmt;
 
 use crate::{
-    ast::{Expr, FuncNode, Location, Module, Stmt, Type, TypeValue, VarLhs},
+    ast::{DocComment, Expr, FuncNode, Location, Module, Stmt, Type, TypeValue, VarLhs},
     lexer::{
         token::{Token, TokenKind},
         Lexer,
@@ -181,6 +181,8 @@ pub fn module(input: &mut Input, name: String) -> Module {
     let mut fn_decls = HashMap::<String, (Type, Location)>::new();
     let mut fn_defns = HashMap::<String, (FuncNode, Location)>::new();
 
+    let mut doc_comments: Vec<DocComment> = vec![];
+
     loop {
         let (stmt, is_eof) = match stmt(input) {
             Some(res) => res,
@@ -205,12 +207,11 @@ pub fn module(input: &mut Input, name: String) -> Module {
 
         match stmt {
             Stmt::Var(var) if is_func_def(&var.rhs) => {
-                if let Expr::Func(fn_node) = var.rhs {
+                if let Expr::Func(mut fn_node) = var.rhs {
                     if var.lhs.name.len() != 1 {
                         // TODO: Raise error.
                         continue;
                     }
-
                     fn_defns.insert(var.lhs.name[0].clone(), (fn_node, var.lhs.location));
                 }
             }
@@ -221,6 +222,9 @@ pub fn module(input: &mut Input, name: String) -> Module {
                 }
 
                 fn_decls.insert(var.lhs.name[0].clone(), (var._type, var.lhs.location));
+            }
+            Stmt::DocComment(md) => {
+                doc_comments.push(md);
             }
             _ => continue,
         };

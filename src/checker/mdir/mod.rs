@@ -1,7 +1,7 @@
 use core::fmt;
 use std::collections::{HashMap, VecDeque};
 
-use crate::ast::{Type, TypeValue};
+use crate::ast::{DocComment, TypeValue};
 
 #[derive(Debug)]
 pub struct MiddleIR {
@@ -30,6 +30,7 @@ pub struct Function {
     pub params: Vec<(String, TypeValue)>,
     pub return_type: TypeValue,
     pub block: Vec<Statement>,
+    pub doc_comments: Vec<DocComment>,
 }
 
 impl Function {
@@ -39,6 +40,7 @@ impl Function {
             params: vec![],
             return_type: TypeValue::Void,
             block: vec![],
+            doc_comments: vec![],
         }
     }
 }
@@ -85,7 +87,6 @@ pub enum Expression {
     Mul,
     Div,
     Pow,
-    Call(TypeValue, String, Vec<Expression>),
     Literal(Literal),
     LParen,
     RParen,
@@ -99,16 +100,6 @@ impl fmt::Display for Expression {
             Expression::Mul => write!(f, "mul"),
             Expression::Div => write!(f, "div"),
             Expression::Pow => write!(f, "pow"),
-            Expression::Call(_, name, args) => {
-                write!(f, "{}(", name)?;
-                for (i, arg) in args.iter().enumerate() {
-                    write!(f, "{}", arg)?;
-                    if i < args.len() - 1 {
-                        write!(f, ", ")?;
-                    }
-                }
-                write!(f, ")")
-            }
             Expression::Literal(lit) => write!(f, "{}", lit),
             Expression::LParen => write!(f, "("),
             Expression::RParen => write!(f, ")"),
@@ -128,7 +119,11 @@ impl Expression {
 
     pub fn is_op(&self) -> bool {
         match self {
-            Expression::Add | Expression::Min | Expression::Mul | Expression::Div | Expression::Pow => true,
+            Expression::Add
+            | Expression::Min
+            | Expression::Mul
+            | Expression::Div
+            | Expression::Pow => true,
             _ => false,
         }
     }
@@ -137,8 +132,10 @@ impl Expression {
 #[derive(Debug)]
 pub enum Literal {
     Int(TypeValue, String),
+    Call(TypeValue, String, Vec<VecDeque<Expression>>),
     // type, value, is_function_parameter
     Identifier(TypeValue, String, bool),
+    String(String),
 }
 
 impl fmt::Display for Literal {
@@ -146,6 +143,8 @@ impl fmt::Display for Literal {
         match self {
             Literal::Int(_, value) => write!(f, "{}", value),
             Literal::Identifier(_, value, _is_function_param) => write!(f, "%{}", value),
+            Literal::Call(_, _, _) => write!(f, "call"),
+            Literal::String(value) => write!(f, "\"%{}\"", value),
         }
     }
 }
@@ -155,6 +154,8 @@ impl Literal {
         match self {
             Literal::Int(t, _) => t,
             Literal::Identifier(t, _, _) => t,
+            Literal::Call(t, _, _) => t,
+            Literal::String(_) => &TypeValue::String,
         }
     }
 }

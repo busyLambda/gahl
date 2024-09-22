@@ -6,6 +6,12 @@ use crate::parser::error::ParseError;
 pub enum Stmt {
     Expr(Expr, Vec<ParseError>),
     Var(Var),
+    DocComment(DocComment),
+}
+
+#[derive(Debug, Clone)]
+pub struct DocComment {
+    pub md: String,
 }
 
 #[derive(Debug, Clone)]
@@ -63,6 +69,8 @@ pub enum TypeValue {
 
     Bool,
 
+    String,
+
     I8,
     I16,
     I32,
@@ -108,6 +116,7 @@ pub struct FuncNode {
 
     pub location: Location,
     pub errors: Vec<ParseError>,
+    pub doc_comments: Vec<DocComment>,
 }
 
 impl FuncNode {
@@ -120,6 +129,7 @@ impl FuncNode {
 
             location: Location::default(),
             errors: vec![],
+            doc_comments: vec![],
         }
     }
 }
@@ -143,6 +153,8 @@ impl VarLhs {
 #[derive(Debug)]
 pub enum Expr {
     Void,
+
+    String(String, Location),
 
     Int(i128, Location),
     Uint(u128, Location),
@@ -169,6 +181,7 @@ impl Expr {
     pub fn get_location(&self) -> Location {
         match self {
             Expr::Void => Location::default(),
+            Expr::String(_, location) => location.clone(),
             Expr::Int(_, location) => location.clone(),
             Expr::Uint(_, location) => location.clone(),
             Expr::Float(_, location) => location.clone(),
@@ -202,6 +215,7 @@ pub struct Var {
 
     pub location: Location,
     pub errors: Vec<ParseError>,
+    pub doc_comments: Vec<DocComment>,
 }
 
 impl Var {
@@ -213,6 +227,7 @@ impl Var {
             is_decl: false,
             location: Location::default(),
             errors: vec![],
+            doc_comments: vec![],
         }
     }
 }

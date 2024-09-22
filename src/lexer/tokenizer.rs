@@ -49,6 +49,16 @@ impl Lexer {
             '[' => TokenKind::OpenBracket,
             ']' => TokenKind::ClosedBracket,
             '@' => TokenKind::At,
+            '"' => {
+                self.eat();
+
+                self.string()
+            }
+            ';' => {
+                self.eat();
+
+                self.doc_comment()
+            }
             '\n' => {
                 self.inc_row();
                 TokenKind::Whitespace
@@ -64,6 +74,31 @@ impl Lexer {
         self.reset_pos_within_tok();
 
         token
+    }
+
+    fn doc_comment(&mut self) -> TokenKind {
+        if let Some('\n') = self.peek() {
+            self.inc_row();
+        }
+
+        self.eat_while(|c| c != ';');
+
+        self.eat();
+
+        TokenKind::DocComment
+    }
+
+    // TODO: Implement escapes and such.
+    fn string(&mut self) -> TokenKind {
+        if let Some('\n') = self.peek() {
+            self.inc_row();
+        }
+
+        self.eat_while(|c| c != '"');
+
+        self.eat();
+
+        TokenKind::String
     }
 
     fn ident_or_kw_or_type(&mut self) -> TokenKind {

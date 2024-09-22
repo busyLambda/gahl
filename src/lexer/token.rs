@@ -17,8 +17,9 @@ impl Span {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TokenKind {
+
     // Types
     Tvoid,
     Tbool,
@@ -36,6 +37,7 @@ pub enum TokenKind {
     Tf64,
     Tchar,
     Tstring,
+
     // Keywords
     KwIf,
     KwMatch,
@@ -43,6 +45,7 @@ pub enum TokenKind {
     KwImport,
     KwStruct,
     KwEnum,
+
     // Funnies
     Dot,
     At,
@@ -58,9 +61,12 @@ pub enum TokenKind {
     ClosedCurly,
     OpenBracket,
     ClosedBracket,
+
     // Literals
     Integer,
     Identifier,
+    String,
+
     // Ops
     Add,
     Min,
@@ -69,7 +75,11 @@ pub enum TokenKind {
     Caret,
     Mod,
     Not,
+
     // Special
+    UnclosedComment,
+    Comment,
+    DocComment,
     Whitespace,
     NewLine, // For sync
     Unknown,
@@ -77,13 +87,13 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
-    // Stmt begin, ) } ], \n and such
     pub fn is_sync_token(&self) -> bool {
         matches!(
             self,
             Self::ClosedParen | Self::ClosedCurly | Self::ClosedBracket | Self::EOF
         )
     }
+
     pub fn is_begin_new_stmt(&self) -> bool {
         matches!(self, |Self::KwIf| Self::KwMatch | Self::KwFn)
     }
@@ -169,7 +179,7 @@ impl Token {
     }
 
     pub fn kind(&self) -> TokenKind {
-        self.kind
+        self.kind.clone()
     }
 
     pub fn literal(&self) -> String {

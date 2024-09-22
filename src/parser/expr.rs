@@ -22,6 +22,15 @@ pub fn primary(input: &mut Input) -> ParseResult<Expr> {
                 false,
             )
         }
+        TK::String => {
+            let string = input.eat().unwrap();
+            let location = Location::new(start_pos, (start_row, start_row));
+            (
+                Expr::String(string.literal(), location),
+                vec![],
+                false,
+            )
+        }
         TK::Identifier => {
             let (name, errors, is_eof) = name(input);
             let location = Location::new(

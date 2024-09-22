@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expr, Stmt},
+    ast::{DocComment, Expr, Stmt},
     lexer::{token::TokenKind as TK, Lexer},
     parser::{expr::expression, var::var},
 };
@@ -21,7 +21,7 @@ pub fn stmt(input: &mut Input) -> Option<(Stmt, bool)> {
         Some(t) => t.kind(),
         None => return None,
     };
-    
+
     match first_kind {
         k if is_var(input) => {
             let (var, is_eof) = var(input);
@@ -30,6 +30,10 @@ pub fn stmt(input: &mut Input) -> Option<(Stmt, bool)> {
         k if k.is_expr() => {
             let (expr, errors, is_eof) = expression(input);
             Some((Stmt::Expr(expr, errors), is_eof))
+        }
+        TK::DocComment => {
+            let doc_comment = input.eat().unwrap().literal();
+            Some((Stmt::DocComment(DocComment { md: doc_comment }), false))
         }
         k => {
             // TODO: Report error

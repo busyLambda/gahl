@@ -1,4 +1,7 @@
-use std::{collections::HashMap, fs};
+use std::{
+    collections::{HashMap, VecDeque},
+    fs,
+};
 
 pub mod mdir;
 
@@ -169,6 +172,7 @@ impl<'a> Checker<'a> {
             function.block.push(stmt);
         });
 
+        function.doc_comments = func_node.doc_comments.clone();
         self.pop_stack();
 
         function
@@ -183,6 +187,7 @@ impl<'a> Checker<'a> {
                 Statement::Expr(out)
             }
             Stmt::Var(var) => Statement::Var(self.var_ty(var)),
+            _ => todo!(),
         }
     }
 
@@ -299,6 +304,10 @@ impl<'a> Checker<'a> {
                 let expr = Expression::Literal(Literal::Int(TypeValue::I32, int.to_string()));
                 (vec![expr], TypeValue::I32)
             }
+            Expr::String(string, _) => {
+                let expr = Expression::Literal(Literal::String(string.clone()));
+                (vec![expr], TypeValue::String)
+            }
             Expr::Identifier(ident, location) => {
                 // TODO: Temporary asf.
                 let name = &ident.name[0];
@@ -343,14 +352,14 @@ impl<'a> Checker<'a> {
         let (func_decl, _) = self.module.fn_decls.get(&tmp_name).unwrap();
         let (func_defn, _) = self.module.fn_defns.get(&tmp_name).unwrap();
 
-        let mut mdir_params: Vec<Expression> = vec![];
+        let mut mdir_params: Vec<VecDeque<Expression>> = vec![];
 
         if let TypeValue::Func(params, ret_ty) = &func_decl.type_value {
             for (i, arg) in args.iter().enumerate() {
                 let param = &params[i];
-                let (mut arg_expr, arg_type) = self.expr_ty(arg);
+                let (arg_expr, arg_type) = self.expr_ty(arg);
 
-                mdir_params.append(&mut arg_expr);
+                mdir_params.push(arg_expr.into());
 
                 if param != &arg_type {
                     let param_name = &func_defn.args[i];
@@ -367,7 +376,8 @@ impl<'a> Checker<'a> {
                 }
             }
 
-            let call = Expression::Call(*ret_ty.clone(), tmp_name.clone(), mdir_params);
+            let literal = Literal::Call(*ret_ty.clone(), tmp_name.clone(), mdir_params);
+            let call = Expression::Literal(literal);
             (vec![call], *ret_ty.clone())
         } else {
             (vec![], TypeValue::Void)
