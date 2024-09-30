@@ -3,10 +3,9 @@ add = fn(a b) {
     a + b
 }
 
+puts : extern fn(s: string) i32
+
 main : fn() void
 main = fn() {
-    res := 5
-    res2 := add(res, 5)
-    exprTest := 1230 + 123 + add(res2, 5)
-    1 + 5
+    puts("Hello, World!")
 }
