@@ -17,11 +17,23 @@ pub mod codegen;
 pub mod docgen;
 pub mod lexer;
 pub mod parser;
+pub mod config;
 
 fn main() {
     let main_file = args()
         .nth(2)
         .expect("No input file provided, expected `<subcommand> <filepath>`.");
+    
+    if args().nth(1).unwrap() == "new" {
+        fs::create_dir(&main_file).expect("Error creating project directory.");
+        
+        let contents = format!("[project]name = \"{}\"\n", &main_file);
+        
+        let mut config_file = fs::File::open(format!("{}/Gahlconf.toml", main_file)).unwrap();
+        config_file.write_all(contents.as_bytes()).unwrap();
+        
+        exit(0);
+    }
 
     let input = fs::read_to_string(main_file).expect("Cannot find `examples/main.gh`");
 
@@ -42,7 +54,7 @@ fn main() {
     let subcommand = args().nth(1).unwrap();
     if subcommand == "build" || subcommand == "b" {
         let mut codegen = CodeGen::new(mdir);
-        println!("Emitting LLVM IR...");
+        println!("[1/3] Emitting LLVM IR...");
         codegen.compile();
 
         // println!("\x1b[33mLLVM IR:\n\x1b[34m{}\x1b[0m", codegen.llvm_ir());

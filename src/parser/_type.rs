@@ -1,10 +1,5 @@
 use crate::{
-    ast::{Location, Type, TypeValue},
-    lexer::{
-        token::{Span, TokenKind as TK},
-        Lexer,
-    },
-    parser::error::ParseError,
+    ast::{Location, Type, TypeValue}, checker::mdir::ExternFunction, lexer::{token::TokenKind as TK, Lexer}, parser::error::ParseError
 };
 
 use super::{error::ParseResult, Input};
@@ -98,7 +93,7 @@ pub fn _type(input: &mut Input) -> ParseResult<Type> {
         _ => {
             println!("{:?}", first_kind);
             todo!()
-        },
+        }
     };
 
     product.type_value = tv;
@@ -115,8 +110,9 @@ pub fn _type(input: &mut Input) -> ParseResult<Type> {
 
 pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
     let mut errors: Vec<ParseError> = vec![];
+    let mut named_params: Vec<String> = vec![];
     let mut params: Vec<TypeValue> = vec![];
-    let mut return_ty: TypeValue = TypeValue::Void;
+    let return_ty: TypeValue;
     let mut is_extern = false;
 
     match input.peek() {
@@ -139,6 +135,8 @@ pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
         TK::OpenParen => {
             input.eat();
 
+            let mut is_multi_param = false;
+
             loop {
                 match input.peek() {
                     Some(t) if t.kind() == TK::ClosedParen => {
@@ -149,6 +147,38 @@ pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
                     None => return (TypeValue::Void, errors, true),
                 }
 
+                if is_multi_param && is_extern {
+                    // TODO: Handle errors...
+                    match input.peek() {
+                        Some(t) if t.kind() == TK::Comma => {
+                            input.eat();
+                        }
+                        Some(t) => {
+                            println!("t: {:?}", t);
+                            todo!()
+                        },
+                        None => todo!(),
+                    }
+                }
+
+                if is_extern {
+                    match input.peek() {
+                        Some(t) if t.kind() == TK::Identifier => {
+                            named_params.push(input.eat().unwrap().literal());
+                        }
+                        Some(t) => todo!(),
+                        None => todo!(),
+                    }
+
+                    match input.peek() {
+                        Some(t) if t.kind() == TK::Column => {
+                            input.eat();
+                        }
+                        Some(t) => todo!(),
+                        None => todo!(),
+                    }
+                }
+
                 let (param_type, mut param_errors, is_eof) = _type(input);
 
                 errors.append(&mut param_errors);
@@ -157,6 +187,8 @@ pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
                 if is_eof {
                     return (TypeValue::Void, errors, is_eof);
                 }
+
+                is_multi_param = true;
             }
         }
         _ => todo!(),
@@ -166,7 +198,24 @@ pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
     return_ty = return_ty_.type_value;
     errors.append(&mut return_ty_errors);
 
-    (TypeValue::Func(params, Box::new(return_ty), is_extern), errors, is_eof)
+    let type_value = if is_extern {
+        let mut final_params: Vec<(String, TypeValue)> = vec![];
+        
+        for i in 0..named_params.len() {
+            let name = named_params[i].clone();
+            let _type = params[i].clone();
+            
+            final_params.push((name, _type));
+        }
+        
+        let extern_function = (final_params, Box::new(return_ty));
+
+        TypeValue::ExFunc(extern_function)
+    } else {
+        TypeValue::Func(params, Box::new(return_ty), is_extern)
+    };
+
+    (type_value, errors, is_eof)
 }
 
 #[test]
@@ -210,7 +259,7 @@ pub fn array_type(input: &mut Input) -> ParseResult<TypeValue> {
         Some(t) if t.kind() == TK::ClosedBracket => {
             input.eat();
         }
-        Some(t) => todo!(),
+        Some(_t) => todo!(),
         None => return (product, errors, false),
     }
 

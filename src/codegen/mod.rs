@@ -2,7 +2,7 @@ use std::{collections::VecDeque, fmt::format};
 
 use crate::{
     ast::TypeValue,
-    checker::mdir::{Expression, Function, Literal, MiddleIR, Statement},
+    checker::mdir::{Expression, ExternFunction, Function, Literal, MiddleIR, Statement},
 };
 
 pub struct CodeGen {
@@ -32,12 +32,12 @@ impl CodeGen {
     }
 }
 
-fn extern_to_llvm_ir(function: &Function) -> String {
+fn extern_to_llvm_ir(function: &ExternFunction) -> String {
     let return_type = type_value_to_llvm_ir(&function.return_type);
     let params = function_params_to_llvm_ir(&function.params);
     let name = &function.name;
 
-    format!("declare {return_type} @{name}({params})")
+    format!("declare {return_type} @{name}({params})\n")
 }
 
 fn function_to_llvm_ir(function: &Function) -> String {
@@ -166,16 +166,25 @@ fn literal_to_llvm_ir(
             is_final = true;
         }
         Literal::String(string) => {
-            let length = string.len() - 2;
+            let null_terminated = format!(
+                "{}\0{}",
+                &string[..string.len() - 1],
+                &string[string.len() - 1..]
+            );
+
+            println!("String: {}", null_terminated);
+
+            let length = null_terminated.len() - 2;
+
             if is_var {
                 result += &format!("alloca [{length} x i8]");
-                ir = format!("[{length} x i8] c{string}");
+                ir = format!("[{length} x i8] c{null_terminated}",);
                 is_final = true;
             } else {
                 let string_name = format!("%{context}_string_{i}");
                 result += &format!("    {string_name} = alloca [{length} x i8]\n");
                 result += &format!(
-                    "    store [{length} x i8] c{string}, [{length} x i8]* {string_name}\n"
+                    "    store [{length} x i8] c{null_terminated}, [{length} x i8]* {string_name}\n"
                 );
                 result += &format!("    {string_name}_ptr = getelementptr inbounds [{length} x i8], [{length} x i8]* {string_name}, i32 0, i32 0\n");
                 ir = string_name;

@@ -6,7 +6,7 @@ use crate::ast::{DocComment, TypeValue};
 #[derive(Debug)]
 pub struct MiddleIR {
     functions: HashMap<String, Function>,
-    externs: Vec<Function>,
+    externs: Vec<ExternFunction>,
 }
 
 impl MiddleIR {
@@ -17,11 +17,15 @@ impl MiddleIR {
         }
     }
 
+    pub fn set_externs(&mut self, externs: Vec<ExternFunction>) {
+        self.externs = externs;
+    }
+
     pub fn functions(&self) -> &HashMap<String, Function> {
         &self.functions
     }
 
-    pub fn externs(&self) -> &Vec<Function> {
+    pub fn externs(&self) -> &Vec<ExternFunction> {
         &self.externs
     }
 
@@ -49,6 +53,13 @@ impl Function {
             doc_comments: vec![],
         }
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ExternFunction {
+    pub name: String,
+    pub params: Vec<(String, TypeValue)>,
+    pub return_type: Box<TypeValue>,
 }
 
 #[derive(Debug)]
@@ -147,7 +158,7 @@ pub enum Literal {
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Literal::Int(_, value) => write!(f, "{}", value),
+            Literal::Int(_, value) => write!(f, "{}\0", value),
             Literal::Identifier(_, value, _is_function_param) => write!(f, "%{}", value),
             Literal::Call(_, _, _) => write!(f, "call"),
             Literal::String(value) => write!(f, "\"%{}\"", value),

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Range};
 
-use crate::parser::error::ParseError;
+use crate::{checker::mdir::ExternFunction, parser::error::ParseError};
 
 #[derive(Debug)]
 pub enum Stmt {
@@ -89,6 +89,7 @@ pub enum TypeValue {
     Array(Box<TypeValue>),
     Generic(Box<TypeValue>),
     Func(Vec<TypeValue>, Box<TypeValue>, bool),
+    ExFunc((Vec<(String, TypeValue)>, Box<TypeValue>)),
 }
 
 #[derive(Debug)]
@@ -236,6 +237,6 @@ impl Var {
 pub struct Module {
     pub name: String,
     pub fn_decls: HashMap<String, (Type, Location)>,
-    pub externs: HashMap<String, (Type, Location)>,
+    pub externs: HashMap<String, (Vec<(String, TypeValue)>, TypeValue)>,
     pub fn_defns: HashMap<String, (FuncNode, Location)>,
 }

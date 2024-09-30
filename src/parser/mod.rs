@@ -178,7 +178,7 @@ impl Input {
 pub fn module(input: &mut Input, name: String) -> Module {
     let mut fn_decls = HashMap::<String, (Type, Location)>::new();
     let mut fn_defns = HashMap::<String, (FuncNode, Location)>::new();
-    let mut externs = HashMap::<String, (Type, Location)>::new();
+    let mut externs = HashMap::<String, (Vec<(String, TypeValue)>, TypeValue)>::new();
 
     let mut doc_comments: Vec<DocComment> = vec![];
 
@@ -198,6 +198,9 @@ pub fn module(input: &mut Input, name: String) -> Module {
 
         let is_func_decl = |var_type: &Type| {
             if let TypeValue::Func(_, _, _) = var_type.type_value {
+                true
+            }
+            else if let TypeValue::ExFunc((_, _)) = var_type.type_value {
                 true
             } else {
                 false
@@ -220,8 +223,8 @@ pub fn module(input: &mut Input, name: String) -> Module {
                     continue;
                 }
 
-                if let TypeValue::Func(_, _, true) = var._type.type_value {
-                    externs.insert(var.lhs.name[0].clone(), (var._type, var.lhs.location));
+                if let TypeValue::ExFunc((params, return_type)) = var._type.type_value {
+                    externs.insert(var.lhs.name[0].clone(), (params, *return_type));
                 } else {
                     fn_decls.insert(var.lhs.name[0].clone(), (var._type, var.lhs.location));
                 }

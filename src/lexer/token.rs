@@ -138,7 +138,7 @@ impl TokenKind {
     pub fn is_expr(&self) -> bool {
         matches!(
             self,
-            Self::Integer | Self::Identifier | Self::Min | Self::OpenParen | Self::KwFn
+            Self::Integer | Self::Identifier | Self::Min | Self::OpenParen | Self::KwFn | Self::KwExtern
         )
     }
 

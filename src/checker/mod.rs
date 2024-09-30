@@ -6,7 +6,8 @@ use std::{
 pub mod mdir;
 
 use mdir::{
-    shunting_yard_this_mf, Expression, Function, Literal, MiddleIR, Statement, Var as MdIrVar,
+    shunting_yard_this_mf, Expression, ExternFunction, Function, Literal, MiddleIR, Statement,
+    Var as MdIrVar,
 };
 
 use crate::{
@@ -132,6 +133,19 @@ impl<'a> Checker<'a> {
             }
         }
 
+        let extern_functions = self
+            .module
+            .externs
+            .iter()
+            .map(|(name, (params, return_type))| ExternFunction {
+                name: name.to_owned(),
+                params: params.clone(),
+                return_type: Box::new(return_type.clone()),
+            })
+            .collect();
+
+        middle_ir.set_externs(extern_functions);
+
         middle_ir
     }
 
@@ -187,7 +201,9 @@ impl<'a> Checker<'a> {
                 Statement::Expr(out)
             }
             Stmt::Var(var) => Statement::Var(self.var_ty(var)),
-            _ => todo!(),
+            s => {
+                todo!()
+            },
         }
     }
 
@@ -348,60 +364,56 @@ impl<'a> Checker<'a> {
     ) -> (Vec<Expression>, TypeValue) {
         // TODO: Don't do this weird "Name" shit...
         let tmp_name = name.name[0].clone();
-        let mut is_extern = false;
 
-        let (func_decl, _) = match self.module.fn_decls.get(&tmp_name) {
+        let (params, return_type) = match self.module.fn_decls.get(&tmp_name) {
             None => match self.module.externs.get(&tmp_name) {
                 None => todo!(),
-                Some(f) => {
-                    is_extern = true;
-                    f
-                }
+                Some(f) => f,
             },
-            Some(f) => f,
+            Some((t, _)) => {
+                &if let TypeValue::Func(ref param_types, ref return_type, false) = t.type_value {
+                    let (func_node, _) = self.module.fn_defns.get(&tmp_name).unwrap();
+                    let param_names = func_node.args.clone();
+                    let mut final_params: Vec<(String, TypeValue)> = vec![];
+
+                    for i in 0..param_types.len() {
+                        let name = param_names[i].clone();
+                        let _type = param_types[i].clone();
+
+                        final_params.push((name, _type));
+                    }
+
+                    (final_params, *return_type.clone())
+                } else {
+                    panic!()
+                }
+            }
         };
-        let func_defn = self.module.fn_defns.get(&tmp_name);
 
         let mut mdir_params: Vec<VecDeque<Expression>> = vec![];
 
-        if let TypeValue::Func(params, ret_ty, is_extern) = &func_decl.type_value {
-            for (i, arg) in args.iter().enumerate() {
-                let param = &params[i];
-                let (arg_expr, arg_type) = self.expr_ty(arg);
+        for (i, arg) in args.iter().enumerate() {
+            let (param_name, param_type) = &params[i];
+            let (arg_expr, arg_type) = self.expr_ty(arg);
 
-                mdir_params.push(arg_expr.into());
+            mdir_params.push(arg_expr.into());
 
-                if param != &arg_type {
-                    let error = if let Some((func_defn, _)) = func_defn {
-                        let param_name = &func_defn.args[i];
-
-                        CheckError::new(
+            if param_type != &arg_type {
+                let error = CheckError::new(
                         arg.get_location(),
                         format!(
                             "Argument `{}` in call to `{}` is incorrect, expected `{:?}` but found `{:?}`.",
-                            param_name, tmp_name, param, arg_type
+                            param_name, tmp_name, param_type, arg_type
                         ),
-                    )
-                    } else {
-                        CheckError::new(
-                        arg.get_location(),
-                        format!(
-                            "Argument `{}` in call to `{}` is incorrect, expected `{:?}` but found `{:?}`.",
-                            i, tmp_name, param, arg_type
-                        ),
-                    )
-                    };
+                    );
 
-                    self.errors.push(error);
-                }
+                self.errors.push(error);
             }
-
-            let literal = Literal::Call(*ret_ty.clone(), tmp_name.clone(), mdir_params);
-            let call = Expression::Literal(literal);
-            (vec![call], *ret_ty.clone())
-        } else {
-            (vec![], TypeValue::Void)
         }
+
+        let literal = Literal::Call(return_type.clone(), tmp_name.clone(), mdir_params);
+        let call = Expression::Literal(literal);
+        (vec![call], return_type.clone())
     }
 
     pub fn var_ty(&mut self, var: &'a Var) -> MdIrVar {

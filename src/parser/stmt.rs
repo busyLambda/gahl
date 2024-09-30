@@ -37,6 +37,7 @@ pub fn stmt(input: &mut Input) -> Option<(Stmt, bool)> {
         }
         k => {
             // TODO: Report error
+            println!("Got: {:?}", k);
             todo!()
         }
     }
