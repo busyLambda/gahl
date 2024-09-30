@@ -27,6 +27,10 @@ pub fn _type(input: &mut Input) -> ParseResult<Type> {
             input.eat();
             TypeValue::Bool
         }
+        TK::Tstring => {
+            input.eat();
+            TypeValue::String
+        }
         TK::Ti8 => {
             input.eat();
             TypeValue::I8
@@ -83,7 +87,7 @@ pub fn _type(input: &mut Input) -> ParseResult<Type> {
             errors.append(&mut array_errors);
             array_type
         }
-        TK::KwFn => {
+        TK::KwFn | TK::KwExtern => {
             let (function_type, mut function_errors, is_eof) = function_type(input);
             if is_eof {
                 todo!()
@@ -91,7 +95,10 @@ pub fn _type(input: &mut Input) -> ParseResult<Type> {
             errors.append(&mut function_errors);
             function_type
         }
-        _ => todo!(),
+        _ => {
+            println!("{:?}", first_kind);
+            todo!()
+        },
     };
 
     product.type_value = tv;
@@ -110,6 +117,16 @@ pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
     let mut errors: Vec<ParseError> = vec![];
     let mut params: Vec<TypeValue> = vec![];
     let mut return_ty: TypeValue = TypeValue::Void;
+    let mut is_extern = false;
+
+    match input.peek() {
+        Some(t) if t.kind() == TK::KwExtern => {
+            input.eat();
+            is_extern = true;
+        }
+        Some(_) => (),
+        None => return (TypeValue::Void, errors, true),
+    }
 
     input.eat();
 
@@ -149,7 +166,7 @@ pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
     return_ty = return_ty_.type_value;
     errors.append(&mut return_ty_errors);
 
-    (TypeValue::Func(params, Box::new(return_ty)), errors, is_eof)
+    (TypeValue::Func(params, Box::new(return_ty), is_extern), errors, is_eof)
 }
 
 #[test]

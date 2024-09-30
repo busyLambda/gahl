@@ -51,12 +51,6 @@ fn main() {
 
         file.write_all(codegen.llvm_ir().as_bytes()).unwrap();
 
-        println!("Bulding...");
-        println!("[1/3] Assembling LLVM IR to bitcode...");
-        Command::new("llvm-as")
-            .args(["out.ll", "-o", "out.bs"])
-            .status()
-            .unwrap();
         println!("[2/3] Linking bitcode to object file...");
         Command::new("clang")
             .args(["-c", "out.ll", "-o", "out.o"])

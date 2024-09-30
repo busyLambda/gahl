@@ -152,7 +152,7 @@ impl<'a> Checker<'a> {
 
         let stack = self.symbol_stack.last_mut().unwrap();
 
-        if let TypeValue::Func(params, ret_type) = &_type.type_value {
+        if let TypeValue::Func(params, ret_type, is_extern) = &_type.type_value {
             function.return_type = *ret_type.clone();
 
             for i in 0..func_node.args.len() {
@@ -348,13 +348,23 @@ impl<'a> Checker<'a> {
     ) -> (Vec<Expression>, TypeValue) {
         // TODO: Don't do this weird "Name" shit...
         let tmp_name = name.name[0].clone();
+        let mut is_extern = false;
 
-        let (func_decl, _) = self.module.fn_decls.get(&tmp_name).unwrap();
-        let (func_defn, _) = self.module.fn_defns.get(&tmp_name).unwrap();
+        let (func_decl, _) = match self.module.fn_decls.get(&tmp_name) {
+            None => match self.module.externs.get(&tmp_name) {
+                None => todo!(),
+                Some(f) => {
+                    is_extern = true;
+                    f
+                }
+            },
+            Some(f) => f,
+        };
+        let func_defn = self.module.fn_defns.get(&tmp_name);
 
         let mut mdir_params: Vec<VecDeque<Expression>> = vec![];
 
-        if let TypeValue::Func(params, ret_ty) = &func_decl.type_value {
+        if let TypeValue::Func(params, ret_ty, is_extern) = &func_decl.type_value {
             for (i, arg) in args.iter().enumerate() {
                 let param = &params[i];
                 let (arg_expr, arg_type) = self.expr_ty(arg);
@@ -362,15 +372,25 @@ impl<'a> Checker<'a> {
                 mdir_params.push(arg_expr.into());
 
                 if param != &arg_type {
-                    let param_name = &func_defn.args[i];
+                    let error = if let Some((func_defn, _)) = func_defn {
+                        let param_name = &func_defn.args[i];
 
-                    let error = CheckError::new(
+                        CheckError::new(
                         arg.get_location(),
                         format!(
                             "Argument `{}` in call to `{}` is incorrect, expected `{:?}` but found `{:?}`.",
                             param_name, tmp_name, param, arg_type
                         ),
-                    );
+                    )
+                    } else {
+                        CheckError::new(
+                        arg.get_location(),
+                        format!(
+                            "Argument `{}` in call to `{}` is incorrect, expected `{:?}` but found `{:?}`.",
+                            i, tmp_name, param, arg_type
+                        ),
+                    )
+                    };
 
                     self.errors.push(error);
                 }

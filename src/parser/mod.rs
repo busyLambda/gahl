@@ -1,10 +1,10 @@
-use std::{borrow::Borrow, collections::HashMap, ops::Range};
+use std::{collections::HashMap, ops::Range};
 
 use error::ParseError;
 use stmt::stmt;
 
 use crate::{
-    ast::{DocComment, Expr, FuncNode, Location, Module, Stmt, Type, TypeValue, VarLhs},
+    ast::{DocComment, Expr, FuncNode, Location, Module, Stmt, Type, TypeValue},
     lexer::{
         token::{Token, TokenKind},
         Lexer,
@@ -172,14 +172,13 @@ impl Input {
 
             self.eat();
         }
-
-        todo!()
     }
 }
 
 pub fn module(input: &mut Input, name: String) -> Module {
     let mut fn_decls = HashMap::<String, (Type, Location)>::new();
     let mut fn_defns = HashMap::<String, (FuncNode, Location)>::new();
+    let mut externs = HashMap::<String, (Type, Location)>::new();
 
     let mut doc_comments: Vec<DocComment> = vec![];
 
@@ -198,7 +197,7 @@ pub fn module(input: &mut Input, name: String) -> Module {
         };
 
         let is_func_decl = |var_type: &Type| {
-            if let TypeValue::Func(_, _) = var_type.type_value {
+            if let TypeValue::Func(_, _, _) = var_type.type_value {
                 true
             } else {
                 false
@@ -207,7 +206,7 @@ pub fn module(input: &mut Input, name: String) -> Module {
 
         match stmt {
             Stmt::Var(var) if is_func_def(&var.rhs) => {
-                if let Expr::Func(mut fn_node) = var.rhs {
+                if let Expr::Func(fn_node) = var.rhs {
                     if var.lhs.name.len() != 1 {
                         // TODO: Raise error.
                         continue;
@@ -221,7 +220,11 @@ pub fn module(input: &mut Input, name: String) -> Module {
                     continue;
                 }
 
-                fn_decls.insert(var.lhs.name[0].clone(), (var._type, var.lhs.location));
+                if let TypeValue::Func(_, _, true) = var._type.type_value {
+                    externs.insert(var.lhs.name[0].clone(), (var._type, var.lhs.location));
+                } else {
+                    fn_decls.insert(var.lhs.name[0].clone(), (var._type, var.lhs.location));
+                }
             }
             Stmt::DocComment(md) => {
                 doc_comments.push(md);
@@ -239,6 +242,7 @@ pub fn module(input: &mut Input, name: String) -> Module {
         name,
         fn_decls,
         fn_defns,
+        externs,
     }
 }
 
@@ -258,5 +262,5 @@ fn test_module_parser() {
     let mut lexer = Lexer::new(input);
     let tokens = lexer.lex();
     let mut input = Input::new(tokens);
-    let module = module(&mut input, String::from("main.gh"));
+    let _module = module(&mut input, String::from("main.gh"));
 }

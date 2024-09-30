@@ -111,6 +111,7 @@ impl Lexer {
             "match" => TokenKind::KwMatch,
             "import" => TokenKind::KwImport,
             "struct" => TokenKind::KwStruct,
+            "extern" => TokenKind::KwExtern,
             "enum" => TokenKind::KwEnum,
             // Types
             "void" => TokenKind::Tvoid,

@@ -42,6 +42,7 @@ pub enum TokenKind {
     KwIf,
     KwMatch,
     KwFn,
+    KwExtern,
     KwImport,
     KwStruct,
     KwEnum,

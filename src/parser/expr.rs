@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expr, FuncNode, Location, Name},
+    ast::{Expr, FuncNode, Location},
     lexer::{token::TokenKind as TK, Lexer},
     parser::{error::ParseError, name::name},
 };
@@ -25,11 +25,7 @@ pub fn primary(input: &mut Input) -> ParseResult<Expr> {
         TK::String => {
             let string = input.eat().unwrap();
             let location = Location::new(start_pos, (start_row, start_row));
-            (
-                Expr::String(string.literal(), location),
-                vec![],
-                false,
-            )
+            (Expr::String(string.literal(), location), vec![], false)
         }
         TK::Identifier => {
             let (name, errors, is_eof) = name(input);
@@ -98,7 +94,7 @@ pub fn primary(input: &mut Input) -> ParseResult<Expr> {
 
             (Expr::Neg(Box::new(expr), location), errors, is_eof)
         }
-        tk => {
+        _tk => {
             todo!()
         }
     }

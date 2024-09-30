@@ -88,7 +88,7 @@ pub enum TypeValue {
 
     Array(Box<TypeValue>),
     Generic(Box<TypeValue>),
-    Func(Vec<TypeValue>, Box<TypeValue>),
+    Func(Vec<TypeValue>, Box<TypeValue>, bool),
 }
 
 #[derive(Debug)]
@@ -236,5 +236,6 @@ impl Var {
 pub struct Module {
     pub name: String,
     pub fn_decls: HashMap<String, (Type, Location)>,
+    pub externs: HashMap<String, (Type, Location)>,
     pub fn_defns: HashMap<String, (FuncNode, Location)>,
 }
