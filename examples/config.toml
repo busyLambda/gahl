@@ -1,0 +1,8 @@
+[project]
+name = "Examples"
+author = "Susa Milan Mihaly"
+
+[clibs]
+clibs = [
+    { name = "core", path = "clibs/core.so", flags = [""] },
+]

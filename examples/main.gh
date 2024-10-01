@@ -1,11 +1,15 @@
+puts : extern fn(s: string) i32
+
+printing : extern fn(a: i32) i32
+
 add : fn(i32 i32) i32
 add = fn(a b) {
     a + b
 }
 
-puts : extern fn(s: string) i32
-
 main : fn() void
 main = fn() {
-    puts("Hello, World!")
+    val := printing(5)
+    second := val * 10
+    printing(second)
 }

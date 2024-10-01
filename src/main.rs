@@ -14,26 +14,34 @@ use parser::{module, Input};
 pub mod ast;
 pub mod checker;
 pub mod codegen;
+pub mod config;
 pub mod docgen;
 pub mod lexer;
 pub mod parser;
-pub mod config;
 
 fn main() {
     let main_file = args()
         .nth(2)
         .expect("No input file provided, expected `<subcommand> <filepath>`.");
-    
+
     if args().nth(1).unwrap() == "new" {
         fs::create_dir(&main_file).expect("Error creating project directory.");
-        
+
         let contents = format!("[project]name = \"{}\"\n", &main_file);
-        
+
         let mut config_file = fs::File::open(format!("{}/Gahlconf.toml", main_file)).unwrap();
         config_file.write_all(contents.as_bytes()).unwrap();
-        
+
         exit(0);
     }
+
+    let config = match config::parse_config() {
+        Ok(c) => c,
+        Err(err) => {
+            eprintln!("Error parsing `config.toml` file: {}", err);
+            exit(1);
+        }
+    };
 
     let input = fs::read_to_string(main_file).expect("Cannot find `examples/main.gh`");
 
@@ -57,8 +65,6 @@ fn main() {
         println!("[1/3] Emitting LLVM IR...");
         codegen.compile();
 
-        // println!("\x1b[33mLLVM IR:\n\x1b[34m{}\x1b[0m", codegen.llvm_ir());
-
         let mut file = File::create("out.ll").unwrap();
 
         file.write_all(codegen.llvm_ir().as_bytes()).unwrap();
@@ -69,10 +75,25 @@ fn main() {
             .status()
             .unwrap();
         println!("[3/3] Linking object file to executable...");
-        Command::new("clang")
-            .args(["out.o", "-o", "out"])
-            .status()
-            .unwrap();
+
+        let mut libs: Vec<String> = vec![];
+        if let Some(clibs) = config.clibs {
+            for clib in clibs.clibs {
+                libs.push(clib.path);
+            }
+        }
+
+        let mut args: Vec<String> = vec!["-o", "out", "out.o"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        args.append(&mut libs);
+
+        let mut command = Command::new("clang");
+        command.args(args);
+        command.status().unwrap();
+
     } else if subcommand == "doc" || subcommand == "d" {
         let docs = gen_docs(mdir);
 
