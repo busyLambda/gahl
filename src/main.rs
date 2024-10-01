@@ -43,13 +43,13 @@ fn main() {
         }
     };
 
-    let input = fs::read_to_string(main_file).expect("Cannot find `examples/main.gh`");
+    let input = fs::read_to_string(&main_file).expect("Cannot find `examples/main.gh`");
 
     let mut lexer = Lexer::new(&input);
     let tokens = lexer.lex();
     let mut parser = Input::new(tokens);
 
-    let module = module(&mut parser, "examples/main.gh".to_string());
+    let module = module(&mut parser, main_file);
 
     let mut checker = Checker::new(&module);
     let mdir = checker.types();

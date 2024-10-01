@@ -1,0 +1,25 @@
+{
+  "name": "gahl",
+  "displayName": "Gahl",
+  "description": "Syntax highlighting for the gahl programming language",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.93.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "gh",
+      "aliases": ["Gahl", "gh"],
+      "extensions": ["gh"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "gh",
+      "scopeName": "source.gahl",
+      "path": "./syntaxes/gh.tmLanguage.json"
+    }]
+  }
+}

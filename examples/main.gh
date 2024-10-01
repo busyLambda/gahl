@@ -9,6 +9,7 @@ add = fn(a b) {
 
 main : fn() void
 main = fn() {
+    val32 := add(20, 20)
     val := printing(5)
     second := val * 10
     printing(second)
