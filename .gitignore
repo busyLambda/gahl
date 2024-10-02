@@ -1,1 +1,4 @@
 /target
+/examples/out
+/examples/out.o
+/examples/out.ll
