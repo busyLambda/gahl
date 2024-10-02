@@ -1,6 +1,6 @@
 #include<stdio.h>
 
-int printing(int a) {
-    printf("Your numer is %i!\n", a);
-    return a + 20;
+int printing(void) {
+    printf("Hello, World!\n");
+    return 0;
 }

@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, fmt::format};
+use std::collections::VecDeque;
 
 use crate::{
     ast::TypeValue,
@@ -80,31 +80,35 @@ fn function_block_to_llvm_ir(
         return "    ret void\n".to_string();
     }
 
-    for stmt in block {
+    for (i, stmt) in block.iter().enumerate() {
         match stmt {
             Statement::Expr(expr) => {
-                let (expr_ir, name, _type) = &expr_to_llvm_ir(expr, context, false);
+                let (expr_ir, name, _type) = &expr_to_llvm_ir(expr, context, i, false);
 
                 let ty = type_value_to_llvm_ir(return_type);
 
-                if return_type == &TypeValue::Void {
+                if return_type == &TypeValue::Void && i == block.len() - 1 {
                     result += expr_ir;
                     break;
                 }
 
-                match name {
-                    Some(name) => {
-                        result += expr_ir;
-                        result += &format!("    ret {ty} {name}\n");
+                if i == block.len() - 1 {
+                    match name {
+                        Some(name) => {
+                            result += expr_ir;
+                            result += &format!("    ret {ty} {name}\n");
+                        }
+                        None => {
+                            result += &format!("    ret {ty} {expr_ir}\n");
+                        }
                     }
-                    None => {
-                        result += &format!("    ret {ty} {expr_ir}\n");
-                    }
+                } else {
+                    result += expr_ir;
                 }
             }
             Statement::Var(var) => {
                 let context = &format!("{}_var", var.lhs);
-                let (expr_ir, name, _type) = &expr_to_llvm_ir(&var.rhs, context, true);
+                let (expr_ir, name, _type) = &expr_to_llvm_ir(&var.rhs, context, i, true);
                 let ty = type_value_to_llvm_ir(&var.ty);
 
                 result += "    ; var\n";
@@ -172,8 +176,6 @@ fn literal_to_llvm_ir(
                 &string[string.len() - 1..]
             );
 
-            println!("String: {}", null_terminated);
-
             let length = null_terminated.len() - 2;
 
             if is_var {
@@ -197,7 +199,7 @@ fn literal_to_llvm_ir(
             let args_ir = args
                 .iter()
                 .map(|arg| {
-                    let (arg_ir, arg_name, _type) = expr_to_llvm_ir(arg, context, false);
+                    let (arg_ir, arg_name, _type) = expr_to_llvm_ir(arg, context, i, false);
                     result += &arg_ir;
                     format!("{_type} {}", arg_name.unwrap())
                 })
@@ -217,6 +219,7 @@ fn literal_to_llvm_ir(
 fn expr_to_llvm_ir(
     expr: &VecDeque<Expression>,
     context: &String,
+    i: usize,
     is_var: bool,
 ) -> (String, Option<String>, String) {
     let mut result = String::new();
@@ -228,13 +231,12 @@ fn expr_to_llvm_ir(
 
     if expr.len() == 1 {
         if let Expression::Literal(rhs) = &expr[0] {
-            let i = 0;
-            let final_name = format!("%{}_expr_{}", context, i);
+            let final_name = format!("%{}_expr_{}", context, i + 1);
 
             let _type = type_value_to_llvm_ir(rhs._type()).to_string();
 
             let (in_ir, expr_ir, is_final) =
-                literal_to_llvm_ir(rhs, context, 0, rhs._type(), is_var);
+                literal_to_llvm_ir(rhs, context, i + 1, rhs._type(), is_var);
 
             result += &in_ir;
             if is_final {
