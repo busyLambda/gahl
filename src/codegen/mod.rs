@@ -150,7 +150,7 @@ fn literal_to_llvm_ir(
 ) -> (String, String, bool) {
     let mut result = String::new();
     let mut ir = String::new();
-    let mut is_final = false;
+    let is_final;
 
     match literal {
         Literal::Int(_ty, int) => {
@@ -158,13 +158,22 @@ fn literal_to_llvm_ir(
             ir += &format!("{int}");
             is_final = true;
         }
-        Literal::Identifier(ty, value, false) => {
-            let param_name = format!("%{value}_load_{context}_{i}");
-            let ty = type_value_to_llvm_ir(ty);
-            result += &format!("    {param_name} = load {ty}, {ty}* %{value}\n");
-            ir = param_name;
-            is_final = true;
-        }
+        Literal::Identifier(ty, value, false) => match ty {
+            TypeValue::String => {
+                let ty = type_value_to_llvm_ir(ty);
+                let param_name = format!("%{value}_gep_{context}_{i}");
+                result += &format!("    {param_name} = getelementptr inbounds [14 x i8], [14 x i8]* %{value}, i32 0, i32 0\n");
+                ir = param_name;
+                is_final = true;
+            }
+            _ => {
+                let param_name = format!("%{value}_load_{context}_{i}");
+                let ty = type_value_to_llvm_ir(ty);
+                result += &format!("    {param_name} = load {ty}, {ty}* %{value}\n");
+                ir = param_name;
+                is_final = true;
+            }
+        },
         Literal::Identifier(_ty, value, true) => {
             ir = format!("%{}", value);
             is_final = true;
@@ -189,7 +198,7 @@ fn literal_to_llvm_ir(
                     "    store [{length} x i8] c{null_terminated}, [{length} x i8]* {string_name}\n"
                 );
                 result += &format!("    {string_name}_ptr = getelementptr inbounds [{length} x i8], [{length} x i8]* {string_name}, i32 0, i32 0\n");
-                ir = string_name;
+                ir = format!("{string_name}_ptr");
                 is_final = true;
             }
         }

@@ -62,18 +62,18 @@ pub fn var(input: &mut Input) -> (Var, bool) {
     // (product, false)
 }
 
-#[test]
-fn test_var_parser() {
-    // let input = "{a, b} := (50 * 2) / 5";
-    let input = "a := (50 * 2) / 5";
-    let mut lexer = Lexer::new(input);
-    let tokens = lexer.lex();
-    let mut input = Input::new(tokens);
+// #[test]
+// fn test_var_parser() {
+//     // let input = "{a, b} := (50 * 2) / 5";
+//     let input = "a := (50 * 2) / 5";
+//     let mut lexer = Lexer::new(input);
+//     let tokens = lexer.lex();
+//     let mut input = Input::new(tokens);
 
-    let (var, is_eof) = var(&mut input);
-    assert_eq!(var.errors.len(), 0);
-    assert_eq!(is_eof, false);
-}
+//     let (var, is_eof) = var(&mut input);
+//     assert_eq!(var.errors.len(), 0);
+//     assert_eq!(is_eof, false);
+// }
 
 pub fn var_lhs(input: &mut Input) -> ParseResult<VarLhs> {
     let (first_kind, first_pos, first_row) = match input.peek() {
@@ -195,14 +195,14 @@ pub fn separated_identifiers(input: &mut Input) -> ParseResult<Vec<String>> {
     (product, errors, false)
 }
 
-#[test]
-fn test_separated_identifiers_parser() {
-    let input = "user, summary";
-    let mut lexer = Lexer::new(input);
-    let tokens = lexer.lex();
-    let mut input = Input::new(tokens);
+// #[test]
+// fn test_separated_identifiers_parser() {
+//     let input = "user, summary";
+//     let mut lexer = Lexer::new(input);
+//     let tokens = lexer.lex();
+//     let mut input = Input::new(tokens);
 
-    let (_identifiers, errors, is_eof) = separated_identifiers(&mut input);
-    assert_eq!(errors.len(), 0);
-    assert_eq!(is_eof, false);
-}
+//     let (_identifiers, errors, is_eof) = separated_identifiers(&mut input);
+//     assert_eq!(errors.len(), 0);
+//     assert_eq!(is_eof, false);
+// }

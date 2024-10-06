@@ -9,7 +9,7 @@ use checker::Checker;
 use codegen::CodeGen;
 use docgen::gen_docs;
 use lexer::Lexer;
-use parser::{module, Input};
+use parser::{module, Input, Parser};
 
 pub mod ast;
 pub mod checker;
@@ -43,13 +43,9 @@ fn main() {
         }
     };
 
-    let input = fs::read_to_string(&main_file).expect("Cannot find `examples/main.gh`");
+    let mut parser = Parser::new(&main_file);
 
-    let mut lexer = Lexer::new(&input);
-    let tokens = lexer.lex();
-    let mut parser = Input::new(tokens);
-
-    let module = module(&mut parser, main_file);
+    let module = parser.parse();
 
     let mut checker = Checker::new(&module);
     let mdir = checker.types();

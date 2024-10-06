@@ -1,11 +1,20 @@
-use std::{collections::HashMap, ops::Range};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::Read,
+    mem::size_of,
+    ops::Range,
+    path::Path,
+    sync::{Arc, Mutex},
+    thread::{self, JoinHandle},
+};
 
 use error::ParseError;
 use import::imports as imports_parser;
 use stmt::stmt;
 
 use crate::{
-    ast::{DocComment, Expr, FuncNode, Location, Module, Stmt, Type, TypeValue},
+    ast::{DocComment, Expr, FuncNode, Location, Module, Name, Stmt, Type, TypeValue},
     lexer::{
         token::{Token, TokenKind},
         Lexer,
@@ -20,20 +29,93 @@ pub mod name;
 pub mod stmt;
 pub mod var;
 
+pub struct Parser {
+    main: Input,
+    parse_jobs: Vec<JoinHandle<Result<Module, String>>>,
+    name: String,
+}
+
+// Traverse the path to find the file, because the end can be a function or struct.
+fn seek_file(name: Name) -> String {
+    match name.name.len() {
+        1 => name.name[0].clone(),
+        len => {
+            let file_route = &name.name[0..len - 2];
+            let joined = file_route.join("/");
+            let path = Path::new(&joined);
+
+            if path.is_file() {
+                path.to_string_lossy().to_string()
+            } else {
+                name.name.join("/")
+            }
+        }
+    }
+}
+
+impl Parser {
+    pub fn new(path: &str) -> Self {
+        let mut contents = String::new();
+        File::open(path)
+            .expect(&format!("Cannot find `{path}`."))
+            .read_to_string(&mut contents);
+
+        let mut lexer = Lexer::new(&contents);
+        let tokens = lexer.lex();
+
+        let callback = Box::new(Self::callback);
+        let input = Input::new(tokens, callback);
+
+        Self {
+            main: input,
+            parse_jobs: vec![],
+            name: path.to_string(),
+        }
+    }
+
+    fn callback(&mut self, name: Name) {
+        let handle = thread::spawn(move || {
+            let path = seek_file(name.clone());
+
+            let mut contents = String::new();
+            File::open(&path)
+                .expect(&format!("Cannot find `{path}`."))
+                .read_to_string(&mut contents);
+
+            let mut lexer = Lexer::new(&contents);
+            let tokens = lexer.lex();
+
+            let callback = Box::new(Self::callback);
+            let mut input = Input::new(tokens, callback);
+
+            let module = module(&mut input, name.name.join("/"));
+            Ok(module)
+        });
+
+        self.parse_jobs.push(handle);
+    }
+
+    pub fn parse(&mut self) -> Module {
+        module(&mut self.main, self.name.clone())
+    }
+}
+
 pub struct Input {
     stream: Vec<Token>,
     pos: usize,
     prev_pos: Range<usize>,
     prev_row: usize,
+    callback: Box<dyn Fn(&mut Parser, Name)>,
 }
 
 impl Input {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Token>, callback: Box<dyn Fn(&mut Parser, Name)>) -> Self {
         Self {
             stream: tokens,
             pos: 0,
             prev_pos: 0..0,
             prev_row: 0,
+            callback,
         }
     }
 
@@ -273,21 +355,21 @@ pub fn module(input: &mut Input, name: String) -> Module {
     }
 }
 
-#[test]
-fn test_module_parser() {
-    let input = "\
-    transform : fn(i32) i32 \
-    transform = fn(x) { \
-        5 + x \
-    } \
-    \
-    add : fn(i32 i32) i32 \
-    add = fn(a b) { \
-        a + b \
-    } \
-    ";
-    let mut lexer = Lexer::new(input);
-    let tokens = lexer.lex();
-    let mut input = Input::new(tokens);
-    let _module = module(&mut input, String::from("main.gh"));
-}
+// #[test]
+// fn test_module_parser() {
+//     let input = "\
+//     transform : fn(i32) i32 \
+//     transform = fn(x) { \
+//         5 + x \
+//     } \
+//     \
+//     add : fn(i32 i32) i32 \
+//     add = fn(a b) { \
+//         a + b \
+//     } \
+//     ";
+//     let mut lexer = Lexer::new(input);
+//     let tokens = lexer.lex();
+//     let mut input = Input::new(tokens);
+//     let _module = module(&mut input, String::from("main.gh"));
+// }

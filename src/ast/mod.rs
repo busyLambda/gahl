@@ -33,7 +33,7 @@ impl Location {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Name {
     pub name: Vec<String>,
 

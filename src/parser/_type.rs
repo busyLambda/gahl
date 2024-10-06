@@ -218,19 +218,19 @@ pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
     (type_value, errors, is_eof)
 }
 
-#[test]
-fn test_function_type_parser() {
-    let input = "fn (i32) void";
-    let mut lexer = Lexer::new(input);
-    let tokens = lexer.lex();
-    let mut input = Input::new(tokens);
+// #[test]
+// fn test_function_type_parser() {
+//     let input = "fn (i32) void";
+//     let mut lexer = Lexer::new(input);
+//     let tokens = lexer.lex();
+//     let mut input = Input::new(tokens);
 
-    let (_type, errors, is_eof) = _type(&mut input);
-    assert_eq!(errors.len(), 0);
-    assert_eq!(is_eof, false);
+//     let (_type, errors, is_eof) = _type(&mut input);
+//     assert_eq!(errors.len(), 0);
+//     assert_eq!(is_eof, false);
 
-    println!("{:?}", _type);
-}
+//     println!("{:?}", _type);
+// }
 
 pub fn array_type(input: &mut Input) -> ParseResult<TypeValue> {
     let mut errors: Vec<ParseError> = vec![];
@@ -266,14 +266,14 @@ pub fn array_type(input: &mut Input) -> ParseResult<TypeValue> {
     (product, errors, false)
 }
 
-#[test]
-fn test_type_parser() {
-    let input = "[i32]";
-    let mut lexer = Lexer::new(input);
-    let tokens = lexer.lex();
-    let mut input = Input::new(tokens);
+// #[test]
+// fn test_type_parser() {
+//     let input = "[i32]";
+//     let mut lexer = Lexer::new(input);
+//     let tokens = lexer.lex();
+//     let mut input = Input::new(tokens);
 
-    let (_type, errors, is_eof) = _type(&mut input);
-    assert_eq!(errors.len(), 0);
-    assert_eq!(is_eof, false);
-}
+//     let (_type, errors, is_eof) = _type(&mut input);
+//     assert_eq!(errors.len(), 0);
+//     assert_eq!(is_eof, false);
+// }

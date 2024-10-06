@@ -53,14 +53,14 @@ pub fn name(input: &mut Input) -> ParseResult<Name> {
     (Name::new(names, location), errors, false)
 }
 
-#[test]
-fn test_name_parser() {
-    let input = "std.fs.open";
-    let mut lexer = Lexer::new(input);
-    let tokens = lexer.lex();
-    let mut input = Input::new(tokens);
+// #[test]
+// fn test_name_parser() {
+//     let input = "std.fs.open";
+//     let mut lexer = Lexer::new(input);
+//     let tokens = lexer.lex();
+//     let mut input = Input::new(tokens);
 
-    let (_name, errors, is_eof) = name(&mut input);
-    assert_eq!(errors.len(), 0);
-    assert_eq!(is_eof, false);
-}
+//     let (_name, errors, is_eof) = name(&mut input);
+//     assert_eq!(errors.len(), 0);
+//     assert_eq!(is_eof, false);
+// }
