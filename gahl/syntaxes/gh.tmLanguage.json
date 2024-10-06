@@ -58,7 +58,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.gh",
-					"match": "\\b(fn|extern)\\b"
+					"match": "\\b(fn|extern|import)\\b"
 				}
 			]
 		},

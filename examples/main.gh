@@ -1,11 +1,19 @@
-puts : extern fn(s: string) i32
+import {
+  std.io.print
+}
 
-printing : extern fn() i32
+; Brought in through a C library ;
+raw_write : extern fn(s: string) i32
+
+add : fn(i32 i32) i32
+add = fn(a b) {
+  a + b
+}
+
 
 main : fn() void
 main = fn() {
-    printing()
-    printing()
-    printing()
-    printing()
+  a := add(1, 2)
+
+  raw_write("Hello, World!")
 }

@@ -1,6 +1,7 @@
 use std::{collections::HashMap, ops::Range};
 
 use error::ParseError;
+use import::imports as imports_parser;
 use stmt::stmt;
 
 use crate::{
@@ -14,6 +15,7 @@ use crate::{
 pub mod _type;
 pub mod error;
 pub mod expr;
+pub mod import;
 pub mod name;
 pub mod stmt;
 pub mod var;
@@ -179,8 +181,30 @@ pub fn module(input: &mut Input, name: String) -> Module {
     let mut fn_decls = HashMap::<String, (Type, Location)>::new();
     let mut fn_defns = HashMap::<String, (FuncNode, Location)>::new();
     let mut externs = HashMap::<String, (Vec<(String, TypeValue)>, TypeValue)>::new();
+    let mut imports = None;
 
     let mut doc_comments: Vec<DocComment> = vec![];
+
+    match input.peek() {
+        Some(t) if t.kind() == TokenKind::KwImport => {
+            let (_imports, imports_errors, is_eof) = imports_parser(input, true);
+
+            imports = Some(_imports);
+
+            // TODO: Report the errors
+
+            if is_eof {
+                return Module {
+                    name,
+                    imports: None,
+                    fn_decls,
+                    fn_defns,
+                    externs,
+                };
+            }
+        }
+        _ => (),
+    }
 
     loop {
         let (stmt, is_eof) = match stmt(input) {
@@ -199,8 +223,7 @@ pub fn module(input: &mut Input, name: String) -> Module {
         let is_func_decl = |var_type: &Type| {
             if let TypeValue::Func(_, _, _) = var_type.type_value {
                 true
-            }
-            else if let TypeValue::ExFunc((_, _)) = var_type.type_value {
+            } else if let TypeValue::ExFunc((_, _)) = var_type.type_value {
                 true
             } else {
                 false
@@ -243,6 +266,7 @@ pub fn module(input: &mut Input, name: String) -> Module {
 
     Module {
         name,
+        imports,
         fn_decls,
         fn_defns,
         externs,

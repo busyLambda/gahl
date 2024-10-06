@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Range};
 
-use crate::{checker::mdir::ExternFunction, parser::error::ParseError};
+use crate::parser::error::ParseError;
 
 #[derive(Debug)]
 pub enum Stmt {
@@ -136,6 +136,23 @@ impl FuncNode {
 }
 
 #[derive(Debug)]
+pub enum Import {
+    ImportSingle(Name),
+    ImportGroup(Imports),
+}
+
+#[derive(Debug)]
+pub struct Imports {
+    pub imports: Vec<Import>,
+}
+
+impl Imports {
+    pub fn default() -> Self {
+        Self { imports: vec![] }
+    }
+}
+
+#[derive(Debug)]
 pub struct VarLhs {
     pub name: Vec<String>,
 
@@ -236,6 +253,7 @@ impl Var {
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
+    pub imports: Option<Imports>,
     pub fn_decls: HashMap<String, (Type, Location)>,
     pub externs: HashMap<String, (Vec<(String, TypeValue)>, TypeValue)>,
     pub fn_defns: HashMap<String, (FuncNode, Location)>,
