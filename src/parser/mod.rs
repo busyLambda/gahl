@@ -119,7 +119,7 @@ impl Parser {
 
         // TODO: Unstuck
         // modules.join().unwrap();
-        let module = handle.join().unwrap();
+        handle.join().unwrap()
     }
 }
 
