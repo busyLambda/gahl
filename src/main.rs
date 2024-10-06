@@ -45,7 +45,7 @@ fn main() {
 
     let mut parser = Parser::new(&main_file);
 
-    let module = parser.parse();
+    let module = parser.parse(&main_file);
 
     let mut checker = Checker::new(&module);
     let mdir = checker.types();
@@ -89,7 +89,6 @@ fn main() {
         let mut command = Command::new("clang");
         command.args(args);
         command.status().unwrap();
-
     } else if subcommand == "doc" || subcommand == "d" {
         let docs = gen_docs(mdir);
 

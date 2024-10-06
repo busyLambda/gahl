@@ -5,7 +5,10 @@ use std::{
     mem::size_of,
     ops::Range,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{
+        mpsc::{channel, Receiver, Sender},
+        Arc, Mutex,
+    },
     thread::{self, JoinHandle},
 };
 
@@ -30,8 +33,7 @@ pub mod stmt;
 pub mod var;
 
 pub struct Parser {
-    main: Input,
-    parse_jobs: Vec<JoinHandle<Result<Module, String>>>,
+    parse_jobs: Vec<Result<Module, String>>,
     name: String,
 }
 
@@ -55,6 +57,13 @@ fn seek_file(name: Name) -> String {
 
 impl Parser {
     pub fn new(path: &str) -> Self {
+        Self {
+            parse_jobs: vec![],
+            name: path.to_string(),
+        }
+    }
+
+    pub fn parse(&mut self, path: &str) -> Module {
         let mut contents = String::new();
         File::open(path)
             .expect(&format!("Cannot find `{path}`."))
@@ -63,40 +72,54 @@ impl Parser {
         let mut lexer = Lexer::new(&contents);
         let tokens = lexer.lex();
 
-        let callback = Box::new(Self::callback);
-        let input = Input::new(tokens, callback);
+        let (sender, receiver) = channel::<Name>();
 
-        Self {
-            main: input,
-            parse_jobs: vec![],
-            name: path.to_string(),
-        }
-    }
+        let name = self.name.clone();
 
-    fn callback(&mut self, name: Name) {
+        let sender_for_this_one = sender.clone();
         let handle = thread::spawn(move || {
-            let path = seek_file(name.clone());
-
-            let mut contents = String::new();
-            File::open(&path)
-                .expect(&format!("Cannot find `{path}`."))
-                .read_to_string(&mut contents);
-
-            let mut lexer = Lexer::new(&contents);
-            let tokens = lexer.lex();
-
-            let callback = Box::new(Self::callback);
-            let mut input = Input::new(tokens, callback);
-
-            let module = module(&mut input, name.name.join("/"));
-            Ok(module)
+            let mut input = Input::new(tokens, sender_for_this_one);
+            module(&mut input, name)
         });
 
-        self.parse_jobs.push(handle);
-    }
+        let modules = thread::spawn(move || {
+            let mut data: Vec<Result<Module, String>> = vec![];
 
-    pub fn parse(&mut self) -> Module {
-        module(&mut self.main, self.name.clone())
+            while let Ok(msg) = receiver.recv() {
+                let path = seek_file(msg.clone());
+
+                let mut contents = String::new();
+                let mut file = match File::open(&path) {
+                    Ok(f) => f,
+                    Err(err) => {
+                        data.push(Err(err.to_string()));
+                        continue;
+                    }
+                };
+
+                match file.read_to_string(&mut contents) {
+                    Ok(_) => (),
+                    Err(err) => {
+                        data.push(Err(err.to_string()));
+                        continue;
+                    }
+                };
+
+                let mut lexer = Lexer::new(&contents);
+                let tokens = lexer.lex();
+
+                let mut input = Input::new(tokens, sender.clone());
+
+                let module = module(&mut input, msg.name.join("/"));
+                data.push(Ok(module));
+            }
+
+            data
+        });
+
+        // TODO: Unstuck
+        // modules.join().unwrap();
+        let module = handle.join().unwrap();
     }
 }
 
@@ -105,17 +128,17 @@ pub struct Input {
     pos: usize,
     prev_pos: Range<usize>,
     prev_row: usize,
-    callback: Box<dyn Fn(&mut Parser, Name)>,
+    sender: Sender<Name>,
 }
 
 impl Input {
-    pub fn new(tokens: Vec<Token>, callback: Box<dyn Fn(&mut Parser, Name)>) -> Self {
+    pub fn new(tokens: Vec<Token>, sender: Sender<Name>) -> Self {
         Self {
             stream: tokens,
             pos: 0,
             prev_pos: 0..0,
             prev_row: 0,
-            callback,
+            sender,
         }
     }
 
