@@ -95,5 +95,9 @@ pub fn imports(input: &mut Input, is_first_import: bool) -> ParseResult<Imports>
         }
     }
 
+    if product.imports.is_empty() {
+        input.sender.send(None).unwrap();
+    }
+
     (product, errors, false)
 }

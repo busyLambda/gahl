@@ -3,7 +3,7 @@ use std::{
     fs::File,
     io::Read,
     mem::size_of,
-    ops::Range,
+    ops::{Range, Sub},
     path::Path,
     sync::{
         mpsc::{channel, Receiver, Sender},
@@ -72,7 +72,7 @@ impl Parser {
         let mut lexer = Lexer::new(&contents);
         let tokens = lexer.lex();
 
-        let (sender, receiver) = channel::<Name>();
+        let (sender, receiver) = channel::<Option<Name>>();
 
         let name = self.name.clone();
 
@@ -82,10 +82,21 @@ impl Parser {
             module(&mut input, name)
         });
 
+        let counter = Arc::new(Mutex::new(0));
+
         let modules = thread::spawn(move || {
             let mut data: Vec<Result<Module, String>> = vec![];
 
             while let Ok(msg) = receiver.recv() {
+                let msg = match msg {
+                    Some(msg) => {
+                        let mut num = counter.lock().unwrap();
+                        *num += 1;
+                        msg
+                    }
+                    None => break,
+                };
+
                 let path = seek_file(msg.clone());
 
                 let mut contents = String::new();
@@ -111,14 +122,23 @@ impl Parser {
                 let mut input = Input::new(tokens, sender.clone());
 
                 let module = module(&mut input, msg.name.join("/"));
+
                 data.push(Ok(module));
+
+                let mut num = counter.lock().unwrap();
+
+                *num -= 1;
+
+                if *num == 0 {
+                    break;
+                }
             }
 
             data
         });
 
         // TODO: Unstuck
-        // modules.join().unwrap();
+        modules.join().unwrap();
         handle.join().unwrap()
     }
 }
@@ -128,11 +148,11 @@ pub struct Input {
     pos: usize,
     prev_pos: Range<usize>,
     prev_row: usize,
-    sender: Sender<Name>,
+    sender: Sender<Option<Name>>,
 }
 
 impl Input {
-    pub fn new(tokens: Vec<Token>, sender: Sender<Name>) -> Self {
+    pub fn new(tokens: Vec<Token>, sender: Sender<Option<Name>>) -> Self {
         Self {
             stream: tokens,
             pos: 0,
