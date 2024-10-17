@@ -1,12 +1,14 @@
+use core::task;
 use std::{
     collections::HashMap,
-    fs::File,
+    fs::{read_to_string, File},
     io::Read,
     mem::size_of,
     ops::{Range, Sub},
     path::Path,
     sync::{
-        mpsc::{channel, Receiver, Sender},
+        atomic::{AtomicUsize, Ordering::SeqCst},
+        mpsc::{channel, Receiver, Sender, TryRecvError},
         Arc, Mutex,
     },
     thread::{self, JoinHandle},
@@ -63,83 +65,72 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self, path: &str) -> Module {
+    fn handle_task(
+        module_map_c: Arc<Mutex<HashMap<String, Module>>>,
+        task_sender_c: Sender<(Name, Sender<()>)>,
+        tc: Arc<AtomicUsize>,
+        name: Name,
+        sender: Sender<()>,
+        block_counter: Arc<AtomicUsize>,
+    ) {
+        tc.fetch_add(1, SeqCst);
+
+        let path = seek_file(name);
+
+        let mut file = File::open(path.clone()).unwrap();
         let mut contents = String::new();
-        File::open(path)
-            .expect(&format!("Cannot find `{path}`."))
-            .read_to_string(&mut contents);
+
+        file.read_to_string(&mut contents).unwrap();
 
         let mut lexer = Lexer::new(&contents);
         let tokens = lexer.lex();
 
-        let (sender, receiver) = channel::<Option<Name>>();
+        let mut input = Input::new(tokens, task_sender_c.clone(), sender, block_counter);
 
-        let name = self.name.clone();
+        let module = module(&mut input, path.clone());
 
-        let sender_for_this_one = sender.clone();
-        let handle = thread::spawn(move || {
-            let mut input = Input::new(tokens, sender_for_this_one);
-            module(&mut input, name)
-        });
+        module_map_c.clone().lock().unwrap().insert(path, module);
+    }
 
-        let counter = Arc::new(Mutex::new(0));
+    pub fn parse(&mut self, path: &str) -> Module {
+        let (task_sender, task_reciever) = channel::<(Name, Sender<()>)>();
 
+        let task_counter = Arc::new(AtomicUsize::new(0));
+        // Increment by 1 so that we account for the main module.
+        let block_counter = Arc::new(AtomicUsize::new(1));
+
+        // Clone for ownership's sake.
+        let task_sender_c = task_sender.clone();
         let modules = thread::spawn(move || {
-            let mut data: Vec<Result<Module, String>> = vec![];
+            let module_map = Arc::new(Mutex::new(HashMap::<String, Module>::new()));
 
-            while let Ok(msg) = receiver.recv() {
-                let msg = match msg {
-                    Some(msg) => {
-                        let mut num = counter.lock().unwrap();
-                        *num += 1;
-                        msg
+            loop {
+                match task_reciever.try_recv() {
+                    Ok((name, sender)) => {
+                        let module_map_c = module_map.clone();
+                        let task_sender_c = task_sender_c.clone();
+
+                        let tc = task_counter.clone();
+                        let bc = block_counter.clone();
+                        thread::spawn(move || {
+                            Self::handle_task(module_map_c, task_sender_c, tc, name, sender, bc);
+                        });
                     }
-                    None => break,
-                };
-
-                let path = seek_file(msg.clone());
-
-                let mut contents = String::new();
-                let mut file = match File::open(&path) {
-                    Ok(f) => f,
-                    Err(err) => {
-                        data.push(Err(err.to_string()));
-                        continue;
+                    Err(TryRecvError::Empty) => {
+                        if (task_counter.load(SeqCst) == 0) && (block_counter.load(SeqCst) == 0) {
+                            break;
+                        }
                     }
-                };
-
-                match file.read_to_string(&mut contents) {
-                    Ok(_) => (),
-                    Err(err) => {
-                        data.push(Err(err.to_string()));
-                        continue;
-                    }
-                };
-
-                let mut lexer = Lexer::new(&contents);
-                let tokens = lexer.lex();
-
-                let mut input = Input::new(tokens, sender.clone());
-
-                let module = module(&mut input, msg.name.join("/"));
-
-                data.push(Ok(module));
-
-                let mut num = counter.lock().unwrap();
-
-                *num -= 1;
-
-                if *num == 0 {
-                    break;
+                    _ => todo!(),
                 }
             }
 
-            data
+            Arc::try_unwrap(module_map).unwrap().into_inner().unwrap()
         });
 
-        // TODO: Unstuck
         modules.join().unwrap();
-        handle.join().unwrap()
+
+        todo!()
     }
 }
 
@@ -148,17 +139,28 @@ pub struct Input {
     pos: usize,
     prev_pos: Range<usize>,
     prev_row: usize,
-    sender: Sender<Option<Name>>,
+
+    // Multithreading / Multimodule stuff
+    sender: Sender<(Name, Sender<()>)>,
+    initiator_sender: Sender<()>,
+    block_counter: Arc<AtomicUsize>,
 }
 
 impl Input {
-    pub fn new(tokens: Vec<Token>, sender: Sender<Option<Name>>) -> Self {
+    pub fn new(
+        tokens: Vec<Token>,
+        sender: Sender<(Name, Sender<()>)>,
+        initiator_sender: Sender<()>,
+        block_counter: Arc<AtomicUsize>,
+    ) -> Self {
         Self {
             stream: tokens,
             pos: 0,
             prev_pos: 0..0,
             prev_row: 0,
             sender,
+            initiator_sender,
+            block_counter,
         }
     }
 

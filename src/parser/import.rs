@@ -1,3 +1,8 @@
+use std::{
+    sync::mpsc::{channel, TryRecvError},
+    thread,
+};
+
 use crate::{
     ast::{Import, Imports, Location},
     lexer::token::{Span, TokenKind as TK},
@@ -52,14 +57,17 @@ pub fn imports(input: &mut Input, is_first_import: bool) -> ParseResult<Imports>
         match input.peek() {
             Some(t) if t.kind() == TK::ClosedCurly => {
                 input.eat();
-                break
+                break;
             }
             Some(t) if t.kind() == TK::Identifier => {}
             Some(t) => {
                 let rows = (t.row_col().0, t.row_col().0);
                 let location = Location::new(t.pos(), rows);
                 let error = ParseError::new(
-                    format!("Expected `ClosedCurly` or `Identifier` but found `{:?}`.", t.kind()),
+                    format!(
+                        "Expected `ClosedCurly` or `Identifier` but found `{:?}`.",
+                        t.kind()
+                    ),
                     location,
                 );
 
@@ -96,7 +104,32 @@ pub fn imports(input: &mut Input, is_first_import: bool) -> ParseResult<Imports>
     }
 
     if product.imports.is_empty() {
-        input.sender.send(None).unwrap();
+        // Done with nothing else to do!
+        input.initiator_sender.send(()).unwrap();
+    } else {
+        product.imports.iter().for_each(|import| {
+            let (callback_sender, callback_reciever) = channel::<()>();
+
+            thread::spawn(move || loop {
+                match callback_reciever.try_recv() {
+                    Ok(_) => {
+                        // You do your stuff lil buddy :3
+                        break;
+                    }
+                    Err(TryRecvError::Empty) => {
+                        continue;
+                    }
+                    _ => todo!(),
+                }
+            });
+
+            match import {
+                Import::ImportSingle(name) => {
+                    input.sender.send((name.clone(), callback_sender)).unwrap();
+                }
+                _ => todo!(),
+            }
+        });
     }
 
     (product, errors, false)
