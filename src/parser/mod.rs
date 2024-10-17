@@ -90,6 +90,8 @@ impl Parser {
         let module = module(&mut input, path.clone());
 
         module_map_c.clone().lock().unwrap().insert(path, module);
+        
+        tc.fetch_sub(1, SeqCst);
     }
 
     pub fn parse(&mut self, path: &str) -> Module {
@@ -101,23 +103,32 @@ impl Parser {
 
         // Clone for ownership's sake.
         let task_sender_c = task_sender.clone();
+        let block_counter_c = block_counter.clone();
+        let task_counter_c = task_counter.clone();
         let modules = thread::spawn(move || {
             let module_map = Arc::new(Mutex::new(HashMap::<String, Module>::new()));
 
             loop {
                 match task_reciever.try_recv() {
                     Ok((name, sender)) => {
+                        println!("GOT CONN!");
                         let module_map_c = module_map.clone();
                         let task_sender_c = task_sender_c.clone();
 
-                        let tc = task_counter.clone();
-                        let bc = block_counter.clone();
+                        let tc = task_counter_c.clone();
+                        let bc = block_counter_c.clone();
                         thread::spawn(move || {
                             Self::handle_task(module_map_c, task_sender_c, tc, name, sender, bc);
                         });
                     }
                     Err(TryRecvError::Empty) => {
-                        if (task_counter.load(SeqCst) == 0) && (block_counter.load(SeqCst) == 0) {
+                        let task_counter_c_loaded = task_counter_c.clone().load(SeqCst);
+                        let block_counter_c_loaded = block_counter_c.clone().load(SeqCst);
+
+                        println!("State:\n\t- task_counter: {task_counter_c_loaded}\n\t- block_counter: {block_counter_c_loaded}",);
+                        if (task_counter_c.clone().load(SeqCst) == 0)
+                            && (block_counter_c.clone().load(SeqCst) == 0)
+                        {
                             break;
                         }
                     }
@@ -125,7 +136,28 @@ impl Parser {
                 }
             }
 
-            Arc::try_unwrap(module_map).unwrap().into_inner().unwrap()
+            module_map
+        });
+
+        let (main_task_sender, main_task_receiver) = channel::<()>();
+
+        let name = Name::from_path(path);
+        task_sender.clone().send((name, main_task_sender.clone())).unwrap();
+        println!("Sent!");
+
+        let bc_clone = block_counter.clone();
+        thread::spawn(move || loop {
+            match main_task_receiver.try_recv() {
+                Ok(_) => {
+                    bc_clone.fetch_sub(1, SeqCst);
+                    break;
+                }
+                Err(TryRecvError::Empty) => continue,
+                Err(err) => {
+                    println!("Error: {}", err.to_string());
+                    panic!()
+                },
+            }
         });
 
         modules.join().unwrap();

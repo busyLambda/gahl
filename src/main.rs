@@ -8,8 +8,7 @@ use std::{
 use checker::Checker;
 use codegen::CodeGen;
 use docgen::gen_docs;
-use lexer::Lexer;
-use parser::{module, Input, Parser};
+use parser::Parser;
 
 pub mod ast;
 pub mod checker;

@@ -50,6 +50,17 @@ impl Name {
     pub fn new(name: Vec<String>, location: Location) -> Self {
         Self { name, location }
     }
+
+    pub fn from_path(path: &str) -> Self {
+        let parts = path.split("/");
+
+        let mut name = Name::new(vec![], Location::default());
+        parts.into_iter().for_each(|part| {
+            name.name.push(part.to_string());
+        });
+        
+        name
+    }
 }
 
 impl PhantomName {
