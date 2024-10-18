@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{collections::HashMap, ops::Range};
 
 use crate::parser::error::ParseError;
@@ -60,6 +61,14 @@ impl Name {
         });
         
         name
+    }
+}
+
+impl fmt::Display for Name {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let path = self.name.join("/");
+
+        write!(f, "{path}")
     }
 }
 

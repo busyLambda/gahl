@@ -1,5 +1,5 @@
 use std::{
-    sync::mpsc::{channel, TryRecvError},
+    sync::{mpsc::{channel, TryRecvError}, atomic::Ordering::SeqCst},
     thread,
 };
 
@@ -108,12 +108,19 @@ pub fn imports(input: &mut Input, is_first_import: bool) -> ParseResult<Imports>
         input.initiator_sender.send(()).unwrap();
     } else {
         product.imports.iter().for_each(|import| {
+            input.block_counter.clone().fetch_add(1, SeqCst);
+
             let (callback_sender, callback_reciever) = channel::<()>();
 
+            let block_coutner_clone = input.block_counter.clone();
+            let initiator_sender_clone = input.initiator_sender.clone();
             thread::spawn(move || loop {
                 match callback_reciever.try_recv() {
                     Ok(_) => {
                         // You do your stuff lil buddy :3
+                        // println!("Got callback! ☑️");
+                        block_coutner_clone.fetch_sub(1, SeqCst);
+                        initiator_sender_clone.send(()).unwrap();
                         break;
                     }
                     Err(TryRecvError::Empty) => {

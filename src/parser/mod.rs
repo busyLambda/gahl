@@ -1,17 +1,9 @@
-use core::task;
 use std::{
-    collections::HashMap,
-    fs::{read_to_string, File},
-    io::Read,
-    mem::size_of,
-    ops::{Range, Sub},
-    path::Path,
-    sync::{
+    collections::HashMap, fs::File, io::Read, ops::Range, path::Path, process::exit, sync::{
         atomic::{AtomicUsize, Ordering::SeqCst},
-        mpsc::{channel, Receiver, Sender, TryRecvError},
+        mpsc::{channel, Sender, TryRecvError},
         Arc, Mutex,
-    },
-    thread::{self, JoinHandle},
+    }, thread
 };
 
 use error::ParseError;
@@ -35,14 +27,16 @@ pub mod stmt;
 pub mod var;
 
 pub struct Parser {
-    parse_jobs: Vec<Result<Module, String>>,
     name: String,
 }
 
 // Traverse the path to find the file, because the end can be a function or struct.
 fn seek_file(name: Name) -> String {
     match name.name.len() {
-        1 => name.name[0].clone(),
+        1 => match name.name[0].clone() {
+            p if p.ends_with(".gh") => p,
+            p => format!("{}.gh", p),
+        },
         len => {
             let file_route = &name.name[0..len - 2];
             let joined = file_route.join("/");
@@ -60,7 +54,6 @@ fn seek_file(name: Name) -> String {
 impl Parser {
     pub fn new(path: &str) -> Self {
         Self {
-            parse_jobs: vec![],
             name: path.to_string(),
         }
     }
@@ -77,6 +70,8 @@ impl Parser {
 
         let path = seek_file(name);
 
+        // println!("Path: {path}");
+
         let mut file = File::open(path.clone()).unwrap();
         let mut contents = String::new();
 
@@ -90,7 +85,7 @@ impl Parser {
         let module = module(&mut input, path.clone());
 
         module_map_c.clone().lock().unwrap().insert(path, module);
-        
+
         tc.fetch_sub(1, SeqCst);
     }
 
@@ -111,7 +106,7 @@ impl Parser {
             loop {
                 match task_reciever.try_recv() {
                     Ok((name, sender)) => {
-                        println!("GOT CONN!");
+                        // println!("Parsing: {}", &name);
                         let module_map_c = module_map.clone();
                         let task_sender_c = task_sender_c.clone();
 
@@ -122,10 +117,10 @@ impl Parser {
                         });
                     }
                     Err(TryRecvError::Empty) => {
-                        let task_counter_c_loaded = task_counter_c.clone().load(SeqCst);
-                        let block_counter_c_loaded = block_counter_c.clone().load(SeqCst);
+                        // let task_counter_c_loaded = task_counter_c.clone().load(SeqCst);
+                        // let block_counter_c_loaded = block_counter_c.clone().load(SeqCst);
 
-                        println!("State:\n\t- task_counter: {task_counter_c_loaded}\n\t- block_counter: {block_counter_c_loaded}",);
+                        // println!("State:\n\t- task_counter: {task_counter_c_loaded}\n\t- block_counter: {block_counter_c_loaded}");
                         if (task_counter_c.clone().load(SeqCst) == 0)
                             && (block_counter_c.clone().load(SeqCst) == 0)
                         {
@@ -142,27 +137,33 @@ impl Parser {
         let (main_task_sender, main_task_receiver) = channel::<()>();
 
         let name = Name::from_path(path);
-        task_sender.clone().send((name, main_task_sender.clone())).unwrap();
-        println!("Sent!");
+        task_sender
+            .clone()
+            .send((name, main_task_sender.clone()))
+            .unwrap();
+
+        // println!("Main sent ☑️");
 
         let bc_clone = block_counter.clone();
         thread::spawn(move || loop {
             match main_task_receiver.try_recv() {
                 Ok(_) => {
                     bc_clone.fetch_sub(1, SeqCst);
+                    // println!("SUB!");
                     break;
                 }
                 Err(TryRecvError::Empty) => continue,
                 Err(err) => {
                     println!("Error: {}", err.to_string());
                     panic!()
-                },
+                }
             }
         });
 
         modules.join().unwrap();
 
-        todo!()
+        println!("It works!");
+        exit(0)
     }
 }
 
@@ -431,22 +432,3 @@ pub fn module(input: &mut Input, name: String) -> Module {
         externs,
     }
 }
-
-// #[test]
-// fn test_module_parser() {
-//     let input = "\
-//     transform : fn(i32) i32 \
-//     transform = fn(x) { \
-//         5 + x \
-//     } \
-//     \
-//     add : fn(i32 i32) i32 \
-//     add = fn(a b) { \
-//         a + b \
-//     } \
-//     ";
-//     let mut lexer = Lexer::new(input);
-//     let tokens = lexer.lex();
-//     let mut input = Input::new(tokens);
-//     let _module = module(&mut input, String::from("main.gh"));
-// }
