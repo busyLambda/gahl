@@ -1,9 +1,16 @@
 use std::{
-    collections::HashMap, fs::File, io::Read, ops::Range, path::Path, process::exit, sync::{
+    collections::HashMap,
+    fs::File,
+    io::Read,
+    ops::Range,
+    path::Path,
+    process::exit,
+    sync::{
         atomic::{AtomicUsize, Ordering::SeqCst},
         mpsc::{channel, Sender, TryRecvError},
         Arc, Mutex,
-    }, thread
+    },
+    thread,
 };
 
 use error::ParseError;
@@ -160,7 +167,9 @@ impl Parser {
             }
         });
 
-        modules.join().unwrap();
+        let modules = modules.join().unwrap();
+
+        let _modules = Arc::try_unwrap(modules).unwrap().into_inner().unwrap();
 
         println!("It works!");
         exit(0)

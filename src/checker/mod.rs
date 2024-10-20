@@ -1,9 +1,10 @@
 use std::{
     collections::{HashMap, VecDeque},
-    fs,
+    fs, sync::Arc,
 };
 
 pub mod mdir;
+pub mod analyzer;
 
 use mdir::{
     shunting_yard_this_mf, Expression, ExternFunction, Function, Literal, MiddleIR, Statement,
@@ -37,15 +38,17 @@ impl CheckError {
 pub struct Checker<'a> {
     errors: Vec<CheckError>,
     warnings: Vec<CheckError>,
+    modules: Arc<HashMap<String, Arc<Module>>>,
     module: &'a Module,
     symbol_stack: Vec<HashMap<&'a String, (TypeValue, bool)>>,
 }
 
 impl<'a> Checker<'a> {
-    pub fn new(module: &'a Module) -> Self {
+    pub fn new(module: &'a Module, modules: Arc<HashMap<String, Arc<Module>>>) -> Self {
         Self {
             errors: vec![],
             warnings: vec![],
+            modules,
             symbol_stack: vec![],
             module,
         }
