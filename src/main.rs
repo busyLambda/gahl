@@ -1,11 +1,14 @@
 use std::{
+    collections::HashMap,
     env::args,
     fs::{self, File},
     io::Write,
     process::{exit, Command},
+    sync::Arc,
 };
 
-use checker::Checker;
+use ast::Module;
+use checker::{analyzer::Analyzer, Checker};
 use codegen::CodeGen;
 use docgen::gen_docs;
 use parser::Parser;
@@ -44,56 +47,72 @@ fn main() {
 
     let mut parser = Parser::new(&main_file);
 
-    let module = parser.parse(&main_file);
+    let modules = parser.parse(&main_file);
+    let modules = Arc::new(
+        modules
+            .into_iter()
+            .map(|(n, m)| (n.clone(), Arc::new(m)))
+            .collect::<HashMap<String, Arc<Module>>>(),
+    );
 
-    let mut checker = Checker::new(&module);
-    let mdir = checker.types();
-
-    if checker.errors().len() != 0 {
-        checker.print_interrupts();
-        exit(1);
-    }
-
-    let subcommand = args().nth(1).unwrap();
-    if subcommand == "build" || subcommand == "b" {
-        let mut codegen = CodeGen::new(mdir);
-        println!("[1/3] Emitting LLVM IR...");
-        codegen.compile();
-
-        let mut file = File::create("out.ll").unwrap();
-
-        file.write_all(codegen.llvm_ir().as_bytes()).unwrap();
-
-        println!("[2/3] Linking bitcode to object file...");
-        Command::new("clang")
-            .args(["-c", "out.ll", "-o", "out.o"])
-            .status()
-            .unwrap();
-        println!("[3/3] Linking object file to executable...");
-
-        let mut libs: Vec<String> = vec![];
-        if let Some(clibs) = config.clibs {
-            for clib in clibs.clibs {
-                libs.push(clib.path);
-            }
+    let mut analyzer = Analyzer::new(modules.clone());
+    match analyzer.analyze() {
+        Ok(_) => {
+            println!("Analyzer finished!");
         }
+        Err(_) => {
+            eprintln!("Analyzer finished with errors!");
+            exit(1);
+        }
+    };
+    // let mut checker = Checker::new(&module);
+    // let mdir = checker.types();
 
-        let mut args: Vec<String> = vec!["-o", "out", "out.o"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+    // if checker.errors().len() != 0 {
+    //     checker.print_interrupts();
+    //     exit(1);
+    // }
 
-        args.append(&mut libs);
+    // let subcommand = args().nth(1).unwrap();
+    // if subcommand == "build" || subcommand == "b" {
+    //     let mut codegen = CodeGen::new(mdir);
+    //     println!("[1/3] Emitting LLVM IR...");
+    //     codegen.compile();
 
-        let mut command = Command::new("clang");
-        command.args(args);
-        command.status().unwrap();
-    } else if subcommand == "doc" || subcommand == "d" {
-        let docs = gen_docs(mdir);
+    //     let mut file = File::create("out.ll").unwrap();
 
-        println!("Docs:\n{}", docs);
-    } else {
-        println!("Invalid subcommand: `{subcommand}`");
-        exit(1);
-    }
+    //     file.write_all(codegen.llvm_ir().as_bytes()).unwrap();
+
+    //     println!("[2/3] Linking bitcode to object file...");
+    //     Command::new("clang")
+    //         .args(["-c", "out.ll", "-o", "out.o"])
+    //         .status()
+    //         .unwrap();
+    //     println!("[3/3] Linking object file to executable...");
+
+    //     let mut libs: Vec<String> = vec![];
+    //     if let Some(clibs) = config.clibs {
+    //         for clib in clibs.clibs {
+    //             libs.push(clib.path);
+    //         }
+    //     }
+
+    //     let mut args: Vec<String> = vec!["-o", "out", "out.o"]
+    //         .iter()
+    //         .map(|s| s.to_string())
+    //         .collect();
+
+    //     args.append(&mut libs);
+
+    //     let mut command = Command::new("clang");
+    //     command.args(args);
+    //     command.status().unwrap();
+    // } else if subcommand == "doc" || subcommand == "d" {
+    //     let docs = gen_docs(mdir);
+
+    //     println!("Docs:\n{}", docs);
+    // } else {
+    //     println!("Invalid subcommand: `{subcommand}`");
+    //     exit(1);
+    // }
 }

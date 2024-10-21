@@ -96,7 +96,7 @@ impl Parser {
         tc.fetch_sub(1, SeqCst);
     }
 
-    pub fn parse(&mut self, path: &str) -> Module {
+    pub fn parse(&mut self, path: &str) -> HashMap<String, Module> {
         let (task_sender, task_reciever) = channel::<(Name, Sender<()>)>();
 
         let task_counter = Arc::new(AtomicUsize::new(0));
@@ -169,10 +169,7 @@ impl Parser {
 
         let modules = modules.join().unwrap();
 
-        let _modules = Arc::try_unwrap(modules).unwrap().into_inner().unwrap();
-
-        println!("It works!");
-        exit(0)
+        Arc::try_unwrap(modules).unwrap().into_inner().unwrap()
     }
 }
 

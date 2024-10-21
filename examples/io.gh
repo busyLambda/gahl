@@ -1,0 +1,10 @@
+import {
+
+}
+
+puts : extern fn(s: string) i32
+
+func : fn(i32 f32) i32
+func = fn(a b) {
+  a + b
+}

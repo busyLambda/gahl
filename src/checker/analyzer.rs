@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicUsize, Ordering::SeqCst},
+        atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst},
         Arc, Mutex,
     },
     thread,
@@ -9,7 +9,7 @@ use std::{
 
 use crate::ast::Module;
 
-use super::{mdir::MiddleIR, Checker};
+use super::{mdir::MiddleIR, CheckError, Checker};
 
 pub struct Analyzer {
     modules: Arc<HashMap<String, Arc<Module>>>,
@@ -24,9 +24,13 @@ impl Analyzer {
         }
     }
 
-    pub fn analyze(&mut self) {
+    pub fn analyze(&mut self) -> Result<(), ()> {
         let tasks = self.modules.len();
         let task_counter = Arc::new(AtomicUsize::new(tasks));
+
+        let found_errors = Arc::new(AtomicBool::new(false));
+
+        // TODO: Create common error manager inface with context about where the error should be.
         for (name, module) in self.modules.iter() {
             let module_c = module.clone();
             let modules_c = self.modules.clone();
@@ -34,12 +38,18 @@ impl Analyzer {
 
             let module = module_c.as_ref();
             let mut checker = Checker::new(module, modules_c);
-            
+
             let mdir_module = checker.types();
-            
-            // TODO: Accumilate the errors and also centrally handle them!
-            
-            self.mdir_modules.lock().unwrap().insert(name.clone(), mdir_module);
+
+            if checker.errors().len() != 0 {
+                checker.print_interrupts();
+                found_errors.store(true, SeqCst);
+            }
+
+            self.mdir_modules
+                .lock()
+                .unwrap()
+                .insert(name.clone(), mdir_module);
 
             thread::spawn(move || {
                 task_counter_c.fetch_sub(1, SeqCst);
@@ -50,6 +60,12 @@ impl Analyzer {
             if task_counter.load(SeqCst) == 0 {
                 break;
             }
+        }
+
+        if found_errors.load(SeqCst) {
+            Err(())
+        } else {
+            Ok(())
         }
     }
 }
