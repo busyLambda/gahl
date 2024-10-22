@@ -59,7 +59,7 @@ impl Name {
         parts.into_iter().for_each(|part| {
             name.name.push(part.to_string());
         });
-        
+
         name
     }
 }
@@ -270,10 +270,16 @@ impl Var {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum ImportKey {
+    Symbol(String),
+    Module(String),
+}
+
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
-    pub imports: Option<HashMap<String, Option<String>>>,
+    pub imports: Option<HashMap<ImportKey, Option<String>>>,
     pub fn_decls: HashMap<String, (Type, Location)>,
     pub externs: HashMap<String, (Vec<(String, TypeValue)>, TypeValue)>,
     pub fn_defns: HashMap<String, (FuncNode, Location)>,

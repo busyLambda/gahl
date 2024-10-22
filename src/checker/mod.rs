@@ -13,7 +13,7 @@ use mdir::{
 };
 
 use crate::{
-    ast::{Expr, FuncNode, Location, Module, Name, Stmt, Type, TypeValue, Var},
+    ast::{Expr, FuncNode, ImportKey, Location, Module, Name, Stmt, Type, TypeValue, Var},
     parser::error::ParseError,
 };
 
@@ -111,6 +111,58 @@ impl<'a> Checker<'a> {
             }
 
             summation += l_len + 1;
+        }
+    }
+
+    // TODO: Break this up into multiple functions, cus holy moly!
+    fn get_imported_function(
+        &mut self,
+        symbol_name: String,
+    ) -> (Vec<(String, TypeValue)>, TypeValue) {
+        if let Some(imports) = &self.module.imports {
+            match imports.get(&ImportKey::Symbol(symbol_name.clone())) {
+                Some(&Some(ref path)) => {
+                    println!("path: {:?}", path);
+
+                    match self.modules.clone().get(path) {
+                        Some(module) => {
+                            let module_c = module.clone();
+                            let (ty, _) = module_c.fn_decls.get(&symbol_name).unwrap();
+                            let (func_node, _) = module_c.fn_defns.get(&symbol_name).unwrap();
+
+                            if let TypeValue::Func(ref param_types, ref return_type, false) =
+                                ty.type_value
+                            {
+                                let param_names = func_node.args.clone();
+                                let mut final_params: Vec<(String, TypeValue)> = vec![];
+
+                                for i in 0..param_types.len() {
+                                    let name = param_names[i].clone();
+                                    let _type = param_types[i].clone();
+
+                                    final_params.push((name, _type));
+                                }
+
+                                return (final_params, *return_type.clone());
+                            } else {
+                                panic!()
+                            }
+                        }
+                        None => {
+                            todo!()
+                        }
+                    }
+                }
+                Some(None) => {
+                    todo!()
+                }
+                None => {
+                    // TODO: Report error.
+                    todo!()
+                }
+            };
+        } else {
+            todo!()
         }
     }
 
@@ -369,17 +421,13 @@ impl<'a> Checker<'a> {
         // TODO: Don't do this weird "Name" shit...
 
         // TODO: More than two would be an error!
-        if name.name.len() == 2 {
-            
-        }
+        if name.name.len() == 2 {}
         let tmp_name = name.name[0].clone();
 
         let (params, return_type) = match self.module.fn_decls.get(&tmp_name) {
             None => match self.module.externs.get(&tmp_name) {
                 // Couldn't find function in externs, trying imports.
-                None => {
-                    todo!();
-                }
+                None => &self.get_imported_function(tmp_name.clone()),
                 Some(f) => f,
             },
             Some((t, _)) => {

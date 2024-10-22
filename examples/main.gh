@@ -1,15 +1,9 @@
 import {
-  io
+  utils.util.add
 }
 
 ; Brought in through a C library ;
 raw_write : extern fn(s: string) i32
-
-add : fn(i32 i32) i32
-add = fn(a b) {
-  a + b
-}
-
 
 main : fn() void
 main = fn() {

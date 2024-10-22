@@ -1,12 +1,14 @@
 use std::{
-    collections::HashMap, sync::{
+    collections::HashMap,
+    sync::{
         atomic::Ordering::SeqCst,
         mpsc::{channel, TryRecvError},
-    }, thread
+    },
+    thread,
 };
 
 use crate::{
-    ast::{Import, Imports, Location},
+    ast::{Import, ImportKey, Imports, Location},
     lexer::token::{Span, TokenKind as TK},
 };
 
@@ -17,12 +19,15 @@ use super::{
 };
 
 // Parses the import block atop a file.
-pub fn imports(input: &mut Input, is_first_import: bool) -> ParseResult<HashMap<String, Option<String>>> {
+pub fn imports(
+    input: &mut Input,
+    is_first_import: bool,
+) -> ParseResult<HashMap<ImportKey, Option<String>>> {
     let mut imports = Imports::default();
-    let mut product = HashMap::<String, Option<String>>::new();
+    let mut product = HashMap::<ImportKey, Option<String>>::new();
     let mut errors: Vec<ParseError> = vec![];
 
-    let (first_kind, first_pos, first_row) = match input.peek() {
+    let (first_kind, _first_pos, _first_row) = match input.peek() {
         Some(t) => (t.kind(), t.pos(), t.row_col().0),
         None => return (product, errors, true),
     };
@@ -87,7 +92,14 @@ pub fn imports(input: &mut Input, is_first_import: bool) -> ParseResult<HashMap<
 
                 let (path, import) = seek_file(name.clone());
 
-                product.insert(path, import);
+                match import {
+                    Some(i) => {
+                        product.insert(ImportKey::Symbol(i), Some(path));
+                    }
+                    None => {
+                        product.insert(ImportKey::Module(path), None);
+                    }
+                };
 
                 if is_eof {
                     return (product, errors, is_eof);
