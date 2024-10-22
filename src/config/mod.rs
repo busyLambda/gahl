@@ -12,6 +12,7 @@ pub struct Config {
 pub struct Project {
     pub name: String,
     pub author: String,
+    pub exec_entry: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

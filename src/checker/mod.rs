@@ -1,10 +1,11 @@
 use std::{
     collections::{HashMap, VecDeque},
-    fs, sync::Arc,
+    fs,
+    sync::Arc,
 };
 
-pub mod mdir;
 pub mod analyzer;
+pub mod mdir;
 
 use mdir::{
     shunting_yard_this_mf, Expression, ExternFunction, Function, Literal, MiddleIR, Statement,
@@ -206,7 +207,7 @@ impl<'a> Checker<'a> {
             Stmt::Var(var) => Statement::Var(self.var_ty(var)),
             s => {
                 todo!()
-            },
+            }
         }
     }
 
@@ -366,11 +367,19 @@ impl<'a> Checker<'a> {
         _location: &Location,
     ) -> (Vec<Expression>, TypeValue) {
         // TODO: Don't do this weird "Name" shit...
+
+        // TODO: More than two would be an error!
+        if name.name.len() == 2 {
+            
+        }
         let tmp_name = name.name[0].clone();
 
         let (params, return_type) = match self.module.fn_decls.get(&tmp_name) {
             None => match self.module.externs.get(&tmp_name) {
-                None => todo!(),
+                // Couldn't find function in externs, trying imports.
+                None => {
+                    todo!();
+                }
                 Some(f) => f,
             },
             Some((t, _)) => {

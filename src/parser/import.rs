@@ -1,6 +1,8 @@
 use std::{
-    sync::{mpsc::{channel, TryRecvError}, atomic::Ordering::SeqCst},
-    thread,
+    collections::HashMap, sync::{
+        atomic::Ordering::SeqCst,
+        mpsc::{channel, TryRecvError},
+    }, thread
 };
 
 use crate::{
@@ -11,12 +13,13 @@ use crate::{
 use super::{
     error::{ParseError, ParseResult},
     name::name,
-    Input,
+    seek_file, Input,
 };
 
 // Parses the import block atop a file.
-pub fn imports(input: &mut Input, is_first_import: bool) -> ParseResult<Imports> {
-    let mut product = Imports::default();
+pub fn imports(input: &mut Input, is_first_import: bool) -> ParseResult<HashMap<String, Option<String>>> {
+    let mut imports = Imports::default();
+    let mut product = HashMap::<String, Option<String>>::new();
     let mut errors: Vec<ParseError> = vec![];
 
     let (first_kind, first_pos, first_row) = match input.peek() {
@@ -82,6 +85,10 @@ pub fn imports(input: &mut Input, is_first_import: bool) -> ParseResult<Imports>
 
                 errors.append(&mut name_errors);
 
+                let (path, import) = seek_file(name.clone());
+
+                product.insert(path, import);
+
                 if is_eof {
                     return (product, errors, is_eof);
                 }
@@ -91,7 +98,7 @@ pub fn imports(input: &mut Input, is_first_import: bool) -> ParseResult<Imports>
                         todo!()
                     }
                     _ => {
-                        product.imports.push(Import::ImportSingle(name));
+                        imports.imports.push(Import::ImportSingle(name));
                     }
                 }
             }
@@ -103,11 +110,11 @@ pub fn imports(input: &mut Input, is_first_import: bool) -> ParseResult<Imports>
         }
     }
 
-    if product.imports.is_empty() {
+    if imports.imports.is_empty() {
         // Done with nothing else to do!
         input.initiator_sender.send(()).unwrap();
     } else {
-        product.imports.iter().for_each(|import| {
+        imports.imports.iter().for_each(|import| {
             input.block_counter.clone().fetch_add(1, SeqCst);
 
             let (callback_sender, callback_reciever) = channel::<()>();

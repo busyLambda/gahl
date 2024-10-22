@@ -1,20 +1,21 @@
 use std::{
     collections::HashMap,
     env::args,
-    fs::{self, File},
+    fs::{self, DirBuilder, File},
     io::Write,
     process::{exit, Command},
     sync::Arc,
 };
 
 use ast::Module;
-use checker::{analyzer::Analyzer, Checker};
-use codegen::CodeGen;
-use docgen::gen_docs;
-use parser::Parser;
+use checker::analyzer::Analyzer;
+use clap::Parser;
+use cli::{Args, SubCommand};
+use parser::Parser as GahlParser;
 
 pub mod ast;
 pub mod checker;
+mod cli;
 pub mod codegen;
 pub mod config;
 pub mod docgen;
@@ -22,20 +23,7 @@ pub mod lexer;
 pub mod parser;
 
 fn main() {
-    let main_file = args()
-        .nth(2)
-        .expect("No input file provided, expected `<subcommand> <filepath>`.");
-
-    if args().nth(1).unwrap() == "new" {
-        fs::create_dir(&main_file).expect("Error creating project directory.");
-
-        let contents = format!("[project]name = \"{}\"\n", &main_file);
-
-        let mut config_file = fs::File::open(format!("{}/Gahlconf.toml", main_file)).unwrap();
-        config_file.write_all(contents.as_bytes()).unwrap();
-
-        exit(0);
-    }
+    let args = Args::parse();
 
     let config = match config::parse_config() {
         Ok(c) => c,
@@ -45,26 +33,81 @@ fn main() {
         }
     };
 
-    let mut parser = Parser::new(&main_file);
+    match args.subcmd {
+        SubCommand::New { project_name } => {
+            match DirBuilder::new().create(&project_name) {
+                Ok(_) => (),
+                Err(err) => {
+                    println!("Error: {}", err.to_string());
+                    exit(1);
+                }
+            };
 
-    let modules = parser.parse(&main_file);
-    let modules = Arc::new(
-        modules
-            .into_iter()
-            .map(|(n, m)| (n.clone(), Arc::new(m)))
-            .collect::<HashMap<String, Arc<Module>>>(),
-    );
+            let mut main_file = match File::create(format!("{project_name}/main.gh")) {
+                Ok(f) => f,
+                Err(err) => {
+                    println!("Error: {}", err.to_string());
+                    exit(1);
+                }
+            };
 
-    let mut analyzer = Analyzer::new(modules.clone());
-    match analyzer.analyze() {
-        Ok(_) => {
-            println!("Analyzer finished!");
+            let main_contents = "import {}\n\nmain : fn() void\nmain = fn() {}\n";
+
+            match main_file.write_all(main_contents.as_bytes()) {
+                Ok(_) => (),
+                Err(err) => {
+                    println!("Error: {}", err.to_string());
+                    exit(1);
+                }
+            };
+
+            let mut config_file = match File::create(format!("{project_name}/config.toml")) {
+                Ok(f) => f,
+                Err(err) => {
+                    println!("Error: {}", err.to_string());
+                    exit(1);
+                }
+            };
+
+            let config_contents = "[project]\nname=\"\"\nauthor=\"\"\nexec_entry=\"\"\n";
+
+            match config_file.write_all(config_contents.as_bytes()) {
+                Ok(_) => (),
+                Err(err) => {
+                    println!("Error: {}", err.to_string());
+                    exit(1);
+                }
+            };
+
+            println!("Project \x1b[1m\x1b[33m`{project_name}`\x1b[0m created successfully!");
         }
-        Err(_) => {
-            eprintln!("Analyzer finished with errors!");
-            exit(1);
+        SubCommand::Build | SubCommand::Run => {
+            let entry_file = &config.project.exec_entry;
+
+            let mut parser = GahlParser::new(&entry_file);
+
+            let modules = parser.parse(&entry_file);
+            let modules = Arc::new(
+                modules
+                    .into_iter()
+                    .map(|(n, m)| (n.clone(), Arc::new(m)))
+                    .collect::<HashMap<String, Arc<Module>>>(),
+            );
+
+            let mut analyzer = Analyzer::new();
+            match analyzer.analyze(modules.clone()) {
+                Ok(_) => {
+                    println!("Analyzer finished!");
+                }
+                Err(_) => {
+                    eprintln!("Analyzer finished with errors!");
+                    exit(1);
+                }
+            };
         }
+        _ => todo!(),
     };
+
     // let mut checker = Checker::new(&module);
     // let mdir = checker.types();
 

@@ -273,7 +273,7 @@ impl Var {
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
-    pub imports: Option<Imports>,
+    pub imports: Option<HashMap<String, Option<String>>>,
     pub fn_decls: HashMap<String, (Type, Location)>,
     pub externs: HashMap<String, (Vec<(String, TypeValue)>, TypeValue)>,
     pub fn_defns: HashMap<String, (FuncNode, Location)>,

@@ -38,21 +38,28 @@ pub struct Parser {
 }
 
 // Traverse the path to find the file, because the end can be a function or struct.
-fn seek_file(name: Name) -> String {
+fn seek_file(name: Name) -> (String, Option<String>) {
     match name.name.len() {
         1 => match name.name[0].clone() {
-            p if p.ends_with(".gh") => p,
-            p => format!("{}.gh", p),
+            p if p.ends_with(".gh") => (p, None),
+            p => (format!("{}.gh", p), None),
         },
         len => {
-            let file_route = &name.name[0..len - 2];
+            let mut file_route = name.name[0..len - 1].iter().map(|x| x.clone()).collect::<Vec<String>>();
+
+            let last = file_route.last_mut().unwrap();
+            last.push_str(".gh");
+
             let joined = file_route.join("/");
+
             let path = Path::new(&joined);
 
+            let import = name.name[len - 1].clone();
+
             if path.is_file() {
-                path.to_string_lossy().to_string()
+                (path.to_string_lossy().to_string(), Some(import))
             } else {
-                name.name.join("/")
+                (name.name.join("/"), None)
             }
         }
     }
@@ -75,9 +82,7 @@ impl Parser {
     ) {
         tc.fetch_add(1, SeqCst);
 
-        let path = seek_file(name);
-
-        // println!("Path: {path}");
+        let (path, _import) = seek_file(name);
 
         let mut file = File::open(path.clone()).unwrap();
         let mut contents = String::new();

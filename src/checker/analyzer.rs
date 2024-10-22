@@ -12,46 +12,54 @@ use crate::ast::Module;
 use super::{mdir::MiddleIR, CheckError, Checker};
 
 pub struct Analyzer {
-    modules: Arc<HashMap<String, Arc<Module>>>,
     mdir_modules: Arc<Mutex<HashMap<String, MiddleIR>>>,
 }
 
 impl Analyzer {
-    pub fn new(modules: Arc<HashMap<String, Arc<Module>>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            modules,
             mdir_modules: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    pub fn analyze(&mut self) -> Result<(), ()> {
-        let tasks = self.modules.len();
+    pub fn analyze(&mut self, modules: Arc<HashMap<String, Arc<Module>>>) -> Result<(), ()> {
+        let tasks = modules.len();
         let task_counter = Arc::new(AtomicUsize::new(tasks));
 
         let found_errors = Arc::new(AtomicBool::new(false));
 
         // TODO: Create common error manager inface with context about where the error should be.
-        for (name, module) in self.modules.iter() {
+        let modules = modules.clone();
+        let mdir_modules = self.mdir_modules.clone();
+
+        // let done = task_counter.load(SeqCst) - tasks;
+        println!("\x1b[1m\x1b[32mStarting analysis of {} modules...\x1b[0m\n", tasks);
+        for (name, module) in modules.iter() {
             let module_c = module.clone();
-            let modules_c = self.modules.clone();
+            let name = name.clone();
+
+            let modules_c = modules.clone();
+            let mdir_modules_c = mdir_modules.clone();
+
             let task_counter_c = task_counter.clone();
-
-            let module = module_c.as_ref();
-            let mut checker = Checker::new(module, modules_c);
-
-            let mdir_module = checker.types();
-
-            if checker.errors().len() != 0 {
-                checker.print_interrupts();
-                found_errors.store(true, SeqCst);
-            }
-
-            self.mdir_modules
-                .lock()
-                .unwrap()
-                .insert(name.clone(), mdir_module);
-
+            let found_errors = found_errors.clone();
             thread::spawn(move || {
+                let module = module_c.clone();
+
+                let mut checker = Checker::new(&module, modules_c);
+
+                let mdir_module = checker.types();
+
+                if checker.errors().len() != 0 {
+                    checker.print_interrupts();
+                    found_errors.store(true, SeqCst);
+                }
+
+                mdir_modules_c
+                    .lock()
+                    .unwrap()
+                    .insert(name.clone(), mdir_module);
+
                 task_counter_c.fetch_sub(1, SeqCst);
             });
         }
