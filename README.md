@@ -16,7 +16,7 @@ Then get into the examples directory.
 
 ```cd examples```
 
-Compile and run the project.
+Compile and run the project (make sure you have clang installed).
 
 ```cargo r -- run```
 
