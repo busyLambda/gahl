@@ -1,6 +1,7 @@
 [project]
 name = "Examples"
 author = "Susa Milan Mihaly"
+exec_entry = "main.gh"
 
 [clibs]
 clibs = [

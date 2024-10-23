@@ -11,6 +11,7 @@ use ast::Module;
 use checker::analyzer::Analyzer;
 use clap::Parser;
 use cli::{Args, SubCommand};
+use codegen::compile;
 use parser::Parser as GahlParser;
 
 pub mod ast;
@@ -95,50 +96,34 @@ fn main() {
             );
 
             let mut analyzer = Analyzer::new();
-            match analyzer.analyze(modules.clone()) {
-                Ok(_) => {
+            let modules = match analyzer.analyze(modules.clone()) {
+                Ok(m) => {
                     println!("Analyzer finished!");
+                    m
                 }
                 Err(_) => {
                     eprintln!("Analyzer finished with errors!");
                     exit(1);
                 }
             };
+
+            let mut libs: Vec<String> = vec![];
+            if let Some(clibs) = config.clibs {
+                for clib in clibs.clibs {
+                    libs.push(clib.path);
+                }
+            }
+
+            compile(modules, libs, &config.project.name);
+            
+            if let SubCommand::Run = args.subcmd {
+                let path = format!("./build/{}", config.project.name);
+                println!("\nRunning: {path}\n");
+                Command::new(path).status().unwrap();
+            }
         }
         _ => todo!(),
     };
-
-    // let mut checker = Checker::new(&module);
-    // let mdir = checker.types();
-
-    // if checker.errors().len() != 0 {
-    //     checker.print_interrupts();
-    //     exit(1);
-    // }
-
-    // let subcommand = args().nth(1).unwrap();
-    // if subcommand == "build" || subcommand == "b" {
-    //     let mut codegen = CodeGen::new(mdir);
-    //     println!("[1/3] Emitting LLVM IR...");
-    //     codegen.compile();
-
-    //     let mut file = File::create("out.ll").unwrap();
-
-    //     file.write_all(codegen.llvm_ir().as_bytes()).unwrap();
-
-    //     println!("[2/3] Linking bitcode to object file...");
-    //     Command::new("clang")
-    //         .args(["-c", "out.ll", "-o", "out.o"])
-    //         .status()
-    //         .unwrap();
-    //     println!("[3/3] Linking object file to executable...");
-
-    //     let mut libs: Vec<String> = vec![];
-    //     if let Some(clibs) = config.clibs {
-    //         for clib in clibs.clibs {
-    //             libs.push(clib.path);
-    //         }
-    //     }
 
     //     let mut args: Vec<String> = vec!["-o", "out", "out.o"]
     //         .iter()

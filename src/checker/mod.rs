@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, VecDeque},
     fs,
     sync::Arc,
+    vec,
 };
 
 pub mod analyzer;
@@ -37,6 +38,7 @@ impl CheckError {
 }
 
 pub struct Checker<'a> {
+    imported_functions: HashMap<String, (Vec<(String, TypeValue)>, TypeValue)>,
     errors: Vec<CheckError>,
     warnings: Vec<CheckError>,
     modules: Arc<HashMap<String, Arc<Module>>>,
@@ -47,6 +49,7 @@ pub struct Checker<'a> {
 impl<'a> Checker<'a> {
     pub fn new(module: &'a Module, modules: Arc<HashMap<String, Arc<Module>>>) -> Self {
         Self {
+            imported_functions: HashMap::new(),
             errors: vec![],
             warnings: vec![],
             modules,
@@ -115,6 +118,7 @@ impl<'a> Checker<'a> {
     }
 
     // TODO: Break this up into multiple functions, cus holy moly!
+    // Actually, just do the funny match after match / ? after ? thingy.
     fn get_imported_function(
         &mut self,
         symbol_name: String,
@@ -122,8 +126,6 @@ impl<'a> Checker<'a> {
         if let Some(imports) = &self.module.imports {
             match imports.get(&ImportKey::Symbol(symbol_name.clone())) {
                 Some(&Some(ref path)) => {
-                    println!("path: {:?}", path);
-
                     match self.modules.clone().get(path) {
                         Some(module) => {
                             let module_c = module.clone();
@@ -201,6 +203,11 @@ impl<'a> Checker<'a> {
             .collect();
 
         middle_ir.set_externs(extern_functions);
+
+        let imported_functions = self.imported_functions.clone();
+        self.imported_functions.clear();
+
+        middle_ir.set_imported_functions(imported_functions);
 
         middle_ir
     }
@@ -427,7 +434,13 @@ impl<'a> Checker<'a> {
         let (params, return_type) = match self.module.fn_decls.get(&tmp_name) {
             None => match self.module.externs.get(&tmp_name) {
                 // Couldn't find function in externs, trying imports.
-                None => &self.get_imported_function(tmp_name.clone()),
+                None => {
+                    let func = self.get_imported_function(tmp_name.clone());
+
+                    self.imported_functions.insert(tmp_name.clone(), func.clone());
+
+                    &func.clone()
+                }
                 Some(f) => f,
             },
             Some((t, _)) => {

@@ -5,6 +5,7 @@ use crate::ast::{DocComment, TypeValue};
 
 #[derive(Debug)]
 pub struct MiddleIR {
+    imported_functions: HashMap<String, (Vec<(String, TypeValue)>, TypeValue)>,
     functions: HashMap<String, Function>,
     externs: Vec<ExternFunction>,
 }
@@ -12,6 +13,7 @@ pub struct MiddleIR {
 impl MiddleIR {
     pub fn new() -> Self {
         Self {
+            imported_functions: HashMap::new(),
             functions: HashMap::new(),
             externs: vec![],
         }
@@ -21,12 +23,23 @@ impl MiddleIR {
         self.externs = externs;
     }
 
+    pub fn set_imported_functions(
+        &mut self,
+        imported_functions: HashMap<String, (Vec<(String, TypeValue)>, TypeValue)>,
+    ) {
+        self.imported_functions = imported_functions;
+    }
+
     pub fn functions(&self) -> &HashMap<String, Function> {
         &self.functions
     }
 
     pub fn externs(&self) -> &Vec<ExternFunction> {
         &self.externs
+    }
+
+    pub fn imported_functions(&self) -> &HashMap<String, (Vec<(String, TypeValue)>, TypeValue)> {
+        &self.imported_functions
     }
 
     pub fn insert_function(&mut self, function: Function) {

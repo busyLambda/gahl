@@ -1,18 +1,95 @@
-use std::collections::VecDeque;
+use std::{
+    collections::{HashMap, VecDeque},
+    fs::File,
+    io::Write,
+    os::unix::process::CommandExt,
+    process::Command,
+    sync::{
+        atomic::{AtomicUsize, Ordering::SeqCst},
+        Arc, Mutex,
+    },
+    thread,
+};
 
 use crate::{
     ast::TypeValue,
     checker::mdir::{Expression, ExternFunction, Function, Literal, MiddleIR, Statement},
 };
 
+pub fn compile(modules: HashMap<String, MiddleIR>, mut libs: Vec<String>, project_name: &String) {
+    let results = thread::spawn(move || {
+        let results = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+        let task_counter = Arc::new(AtomicUsize::new(modules.len()));
+
+        modules.into_iter().for_each(|(name, module)| {
+            let task_counter_c = task_counter.clone();
+            let results_c = results.clone();
+            thread::spawn(move || {
+                let mut codegen = CodeGen::new(module, name);
+                codegen.compile();
+
+                results_c
+                    .lock()
+                    .unwrap()
+                    .push((codegen.name, codegen.llvm_ir));
+
+                task_counter_c.fetch_sub(1, SeqCst)
+            });
+        });
+
+        loop {
+            if task_counter.load(SeqCst) == 0 {
+                break;
+            }
+        }
+
+        results
+    });
+
+    let results = Arc::try_unwrap(results.join().unwrap())
+        .unwrap()
+        .into_inner()
+        .unwrap();
+
+    let mut frags = vec![];
+
+    results.iter().for_each(|(name, llvm_ir)| {
+        let object_file_path = format!("build/{}.o", name.replace('/', ""));
+
+        frags.push(object_file_path.clone());
+
+        let output_path = format!("build/{}.ll", name.replace('/', ""));
+        let mut file = File::create(&output_path).unwrap();
+        file.write_all(llvm_ir.as_bytes()).unwrap();
+
+        let args = ["-c", output_path.as_str(), "-o", object_file_path.as_str()];
+
+        Command::new("clang").args(args).status().unwrap();
+    });
+
+    frags.append(&mut libs);
+
+    let out_path = format!("build/{project_name}");
+    let mut args: Vec<String> = vec!["-o", &out_path]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
+    args.append(&mut frags);
+
+    Command::new("clang").args(args).status().unwrap();
+}
+
 pub struct CodeGen {
+    name: String,
     mdir: MiddleIR,
     llvm_ir: String,
 }
 
 impl CodeGen {
-    pub fn new(mdir: MiddleIR) -> Self {
+    pub fn new(mdir: MiddleIR, name: String) -> Self {
         Self {
+            name,
             mdir,
             llvm_ir: String::new(),
         }
@@ -22,6 +99,10 @@ impl CodeGen {
         self.mdir.externs().iter().for_each(|f| {
             self.llvm_ir += &extern_to_llvm_ir(f);
         });
+        self.mdir
+            .imported_functions()
+            .iter()
+            .for_each(|(n, f)| self.llvm_ir += &imported_function_to_llvm_ir(n, f));
         self.mdir.functions().iter().for_each(|(_, function)| {
             self.llvm_ir += &function_to_llvm_ir(function);
         });
@@ -30,6 +111,16 @@ impl CodeGen {
     pub fn llvm_ir(&self) -> &String {
         &self.llvm_ir
     }
+}
+
+fn imported_function_to_llvm_ir(
+    name: &String,
+    imported_function: &(Vec<(String, TypeValue)>, TypeValue),
+) -> String {
+    let (params, return_type) = imported_function;
+    let return_type = type_value_to_llvm_ir(return_type);
+    let params = function_params_to_llvm_ir(params);
+    format!("declare {return_type} @{name}({params})\n")
 }
 
 fn extern_to_llvm_ir(function: &ExternFunction) -> String {
