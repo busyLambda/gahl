@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <string.h>
+#include <stdio.h>
 #include <memory.h>
 
 int raw_write(const char *s) {
@@ -19,4 +20,9 @@ int raw_write(const char *s) {
     );
 
     return result;  // Return the result of the system call (number of bytes written or an error code)
+}
+
+int print_number(int *num) {
+    printf("Number -> %d\n", *num);
+    return 0;
 }

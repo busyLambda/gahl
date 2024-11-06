@@ -1,6 +1,6 @@
 import {}
 
-add : fn(i32 f32) i32
+add : fn(i32 i32) i32
 add = fn(a b) {
     a + b
 }

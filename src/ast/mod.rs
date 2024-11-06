@@ -87,6 +87,8 @@ pub enum TypeValue {
 
     Void,
 
+    Ptr(Box<TypeValue>),
+
     Bool,
 
     String,

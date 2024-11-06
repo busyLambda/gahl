@@ -96,6 +96,10 @@ impl CodeGen {
     }
 
     pub fn compile(&mut self) {
+        self.llvm_ir += "target triple = \"x86_64-pc-linux-gnu\"\n";
+        self.llvm_ir += "declare ptr @GC_malloc(i64)\n";
+        self.llvm_ir += "declare void @GC_init()\n";
+
         self.mdir.externs().iter().for_each(|f| {
             self.llvm_ir += &extern_to_llvm_ir(f);
         });
@@ -202,6 +206,18 @@ fn function_block_to_llvm_ir(
                 let (expr_ir, name, _type) = &expr_to_llvm_ir(&var.rhs, context, i, true);
                 let ty = type_value_to_llvm_ir(&var.ty);
 
+                println!("Var decl: {:?}\n", var.lhs);
+
+                // println!("%{context} = alloca ptr");
+                // println!("%{context}_alloca_ptr = call ptr @GC_malloc(i64 8)");
+                // println!("store {ty} 0, {ty}* %{context}_alloca_ptr");
+                // println!("%{context}_alloca_load = load ptr, ptr %{context}");
+
+                result += &format!("    %{} = alloca ptr\n", var.lhs);
+                result += &format!("    %{context}_alloca_ptr = call ptr @GC_malloc(i64 8)\n");
+                result += &format!("    store {ty} 0, {ty}* %{context}_alloca_ptr\n");
+                result += &format!("    %{context}_alloca_load = load ptr, ptr %{}\n", var.lhs);
+
                 result += "    ; var\n";
 
                 match name {
@@ -210,12 +226,16 @@ fn function_block_to_llvm_ir(
                             result += &format!("    %{} = {expr_ir}\n", var.lhs);
                             result += &format!("    store {name}, ptr %{}\n", var.lhs);
                         } else {
+                            // println!("store {ty} {name}, {ty} %{context}_alloca_load");
                             result += expr_ir;
-                            result += &format!("    %{} = alloca {ty}\n", var.lhs);
-                            result += &format!("    store {ty} {name}, {ty}* %{}\n", var.lhs);
+                            result +=
+                                &format!("    store {ty} {name}, ptr %{context}_alloca_load\n")
+                            // result += &format!("    %{} = alloca {ty}\n", var.lhs);
+                            // result += &format!("    store {ty} {name}, {ty}* %{}\n", var.lhs);
                         }
                     }
                     None => {
+                        println!("store {ty} {expr_ir}, {ty} %{context}_alloca_load");
                         result += &format!("    %{} = alloca {ty}\n", var.lhs);
                         result += &format!("    store {ty} {expr_ir}, {ty}* %{}\n", var.lhs);
                     }
@@ -260,7 +280,7 @@ fn literal_to_llvm_ir(
             _ => {
                 let param_name = format!("%{value}_load_{context}_{i}");
                 let ty = type_value_to_llvm_ir(ty);
-                result += &format!("    {param_name} = load {ty}, {ty}* %{value}\n");
+                result += &format!("    {param_name} = load ptr, {ty}* %{value}\n");
                 ir = param_name;
                 is_final = true;
             }
@@ -301,7 +321,11 @@ fn literal_to_llvm_ir(
                 .map(|arg| {
                     let (arg_ir, arg_name, _type) = expr_to_llvm_ir(arg, context, i, false);
                     result += &arg_ir;
-                    format!("{_type} {}", arg_name.unwrap())
+                    if let Expression::Literal(Literal::Identifier(_type, _name, _)) = &arg[0] {
+                        format!("ptr {}", arg_name.unwrap())
+                    } else {
+                        format!("{_type} {}", arg_name.unwrap())
+                    }
                 })
                 .collect::<Vec<String>>()
                 .join(", ");
@@ -416,14 +440,37 @@ fn expr_to_llvm_ir(
     (result, prev_name, _type)
 }
 
-fn type_value_to_llvm_ir(type_value: &TypeValue) -> &str {
+fn type_value_to_llvm_ir(type_value: &TypeValue) -> String {
     match type_value {
-        TypeValue::Void => "void",
-        TypeValue::I32 => "i32",
-        TypeValue::String => "i8*",
+        TypeValue::Void => "void".to_string(),
+        TypeValue::I32 => "i32".to_string(),
+        TypeValue::String => "i8*".to_string(),
+        TypeValue::Ptr(_inner_ty) => {
+            // let inner_ty = type_value_to_llvm_ir(inner_ty);
+            // format!("{}*", inner_ty)
+            format!("ptr")
+        }
         tyv => {
             println!("Unhandled TypeValue: `{:?}`", tyv);
             todo!()
         }
+    }
+}
+
+fn type_and_expr_to_size(expr: &Expression, type_value: &TypeValue) -> u32 {
+    match type_value {
+        TypeValue::I8 => 1,
+        TypeValue::I16 => 2,
+        TypeValue::I32 => 4,
+        TypeValue::I64 => 8,
+        TypeValue::String => {
+            if let Expression::Literal(literal) = expr {
+                if let Literal::String(string) = literal {
+                    return string.len() as u32;
+                }
+            }
+            0
+        }
+        _ => todo!(),
     }
 }

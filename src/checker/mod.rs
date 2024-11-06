@@ -125,36 +125,34 @@ impl<'a> Checker<'a> {
     ) -> (Vec<(String, TypeValue)>, TypeValue) {
         if let Some(imports) = &self.module.imports {
             match imports.get(&ImportKey::Symbol(symbol_name.clone())) {
-                Some(&Some(ref path)) => {
-                    match self.modules.clone().get(path) {
-                        Some(module) => {
-                            let module_c = module.clone();
-                            let (ty, _) = module_c.fn_decls.get(&symbol_name).unwrap();
-                            let (func_node, _) = module_c.fn_defns.get(&symbol_name).unwrap();
+                Some(&Some(ref path)) => match self.modules.clone().get(path) {
+                    Some(module) => {
+                        let module_c = module.clone();
+                        let (ty, _) = module_c.fn_decls.get(&symbol_name).unwrap();
+                        let (func_node, _) = module_c.fn_defns.get(&symbol_name).unwrap();
 
-                            if let TypeValue::Func(ref param_types, ref return_type, false) =
-                                ty.type_value
-                            {
-                                let param_names = func_node.args.clone();
-                                let mut final_params: Vec<(String, TypeValue)> = vec![];
+                        if let TypeValue::Func(ref param_types, ref return_type, false) =
+                            ty.type_value
+                        {
+                            let param_names = func_node.args.clone();
+                            let mut final_params: Vec<(String, TypeValue)> = vec![];
 
-                                for i in 0..param_types.len() {
-                                    let name = param_names[i].clone();
-                                    let _type = param_types[i].clone();
+                            for i in 0..param_types.len() {
+                                let name = param_names[i].clone();
+                                let _type = param_types[i].clone();
 
-                                    final_params.push((name, _type));
-                                }
-
-                                return (final_params, *return_type.clone());
-                            } else {
-                                panic!()
+                                final_params.push((name, _type));
                             }
-                        }
-                        None => {
-                            todo!()
+
+                            return (final_params, *return_type.clone());
+                        } else {
+                            panic!()
                         }
                     }
-                }
+                    None => {
+                        todo!()
+                    }
+                },
                 Some(None) => {
                     todo!()
                 }
@@ -437,7 +435,8 @@ impl<'a> Checker<'a> {
                 None => {
                     let func = self.get_imported_function(tmp_name.clone());
 
-                    self.imported_functions.insert(tmp_name.clone(), func.clone());
+                    self.imported_functions
+                        .insert(tmp_name.clone(), func.clone());
 
                     &func.clone()
                 }
@@ -471,7 +470,16 @@ impl<'a> Checker<'a> {
 
             mdir_params.push(arg_expr.into());
 
-            if param_type != &arg_type {
+            let doesnt_match = match (param_type, &arg_type) {
+                (TypeValue::Ptr(a), b) => {
+                    &**a != b
+                },
+                (a, b) => {
+                    a != b
+                },
+            };
+
+            if doesnt_match {
                 let error = CheckError::new(
                         arg.get_location(),
                         format!(

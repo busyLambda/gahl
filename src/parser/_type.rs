@@ -14,6 +14,18 @@ pub fn _type(input: &mut Input) -> ParseResult<Type> {
     };
 
     let tv = match first_kind {
+        TK::Mul => {
+            input.eat();
+            let (inner_type, mut type_errors, is_eof) = _type(input);
+
+            errors.append(&mut type_errors);
+
+            if is_eof {
+                todo!()
+            }
+
+            TypeValue::Ptr(Box::new(inner_type.type_value))
+        }
         TK::Tvoid => {
             input.eat();
             TypeValue::Void

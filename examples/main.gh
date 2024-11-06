@@ -2,12 +2,11 @@ import {
   utils.util.add
 }
 
-; Brought in through a C library ;
-raw_write : extern fn(s: string) i32
+raw_write    : extern fn(s: string) i32
+print_number : extern fn(n: *i32)   i32
 
 main : fn() void
 main = fn() {
   a := add(1, 2)
-
-  raw_write("Hello, World!")
+  print_number(a)
 }

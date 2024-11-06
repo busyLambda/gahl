@@ -5,5 +5,10 @@ exec_entry = "main.gh"
 
 [clibs]
 clibs = [
-    { name = "core", path = "clibs/core.so", flags = [""] },
+  { name = "core", path = "clibs/core.so", flags = [
+    "",
+  ] },
+  { name = "GC", path = "clibs/libgc.so", flags = [
+  ] },
 ]
+
