@@ -47,7 +47,7 @@ pub fn primary(input: &mut Input) -> ParseResult<Expr> {
                         start_pos.start..input.prev_pos.end,
                         (start_row, input.prev_row),
                     );
-
+                    
                     (Expr::FuncCall(name, args, call_location), errors, false)
                 }
                 _ => (Expr::Identifier(name, location), errors, is_eof),

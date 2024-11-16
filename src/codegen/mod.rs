@@ -206,7 +206,7 @@ fn function_block_to_llvm_ir(
                 let (expr_ir, name, _type) = &expr_to_llvm_ir(&var.rhs, context, i, true);
                 let ty = type_value_to_llvm_ir(&var.ty);
 
-                println!("Var decl: {:?}\n", var.lhs);
+                result += "    ; var\n";
 
                 // println!("%{context} = alloca ptr");
                 // println!("%{context}_alloca_ptr = call ptr @GC_malloc(i64 8)");
@@ -217,8 +217,6 @@ fn function_block_to_llvm_ir(
                 result += &format!("    %{context}_alloca_ptr = call ptr @GC_malloc(i64 8)\n");
                 result += &format!("    store {ty} 0, {ty}* %{context}_alloca_ptr\n");
                 result += &format!("    %{context}_alloca_load = load ptr, ptr %{}\n", var.lhs);
-
-                result += "    ; var\n";
 
                 match name {
                     Some(name) => {
@@ -235,7 +233,6 @@ fn function_block_to_llvm_ir(
                         }
                     }
                     None => {
-                        println!("store {ty} {expr_ir}, {ty} %{context}_alloca_load");
                         result += &format!("    %{} = alloca {ty}\n", var.lhs);
                         result += &format!("    store {ty} {expr_ir}, {ty}* %{}\n", var.lhs);
                     }
@@ -313,25 +310,52 @@ fn literal_to_llvm_ir(
                 is_final = true;
             }
         }
-        Literal::Call(ret_ty, name, args) => {
+        Literal::Call(ret_ty, func_name, args) => {
             let ret_ty_ir = type_value_to_llvm_ir(ret_ty);
-
+            
             let args_ir = args
                 .iter()
-                .map(|arg| {
-                    let (arg_ir, arg_name, _type) = expr_to_llvm_ir(arg, context, i, false);
+                .map(|(arg, arg_type_value)| {
+                    let (arg_ir, arg_name, arg_type) = expr_to_llvm_ir(arg, context, i, false);
                     result += &arg_ir;
-                    if let Expression::Literal(Literal::Identifier(_type, _name, _)) = &arg[0] {
-                        format!("ptr {}", arg_name.unwrap())
+                    if let Expression::Literal(Literal::Identifier(_type, name, _)) = &arg[0] {
+                        let arg_name = arg_name.unwrap();
+
+                        let ty = type_value_to_llvm_ir(_type);
+                        let arg_clone = format!("{arg_name}_clone\n");
+                        result += &format!("    {arg_clone} = alloca {ty}\n");
+                        result += &format!("    %{name}_cpy_clone_{i} = load ptr, ptr %{name}\n");
+                        result += &format!("    call void @llvm.memcpy.p0.p0.i64(ptr align 4 {arg_clone}, ptr align 4 %{name}_cpy_clone_{i}, i64 4, i1 false)\n");
+                        /*
+                        match _type {
+                            TypeValue::Ptr(subtype) => {
+                                let ty = type_value_to_llvm_ir(subtype);
+                                let arg_clone = format!("{arg_name}_clone");
+                                result += &format!("    %{arg_clone} = alloca ");
+                                result += &format!("    call void @llvm.memcpy.p0.p0.i64(ptr align 4 %{arg_clone}, ptr align 4 %6, i64 4, i1 false)");
+                            }
+                            ty => {
+                                let ty = type_value_to_llvm_ir(subtype);
+                                let arg_clone = format!("{arg_name}_clone");
+                                result += &format!("    %{arg_clone} = alloca ");
+                                result += &format!("    call void @llvm.memcpy.p0.p0.i64(ptr align 4 %{arg_clone}, ptr align 4 %6, i64 4, i1 false)");
+                            },
+                        }*/
+                        if let TypeValue::Ptr(_inner_type) = arg_type_value {
+                            format!("ptr {arg_name}_clone")
+                        } else {
+                            result += &format!("    {arg_name}_load_to_value = load i32, ptr {arg_name}_clone, align 4\n");
+                            format!("{ty} {arg_name}_load_to_value")
+                        }
                     } else {
-                        format!("{_type} {}", arg_name.unwrap())
+                        format!("{arg_type} {}", arg_name.unwrap())
                     }
                 })
                 .collect::<Vec<String>>()
                 .join(", ");
 
             let call_name = format!("%{context}_call_{i}");
-            result += &format!("    {call_name} = call {ret_ty_ir} @{name}({args_ir})\n");
+            result += &format!("    {call_name} = call {ret_ty_ir} @{func_name}({args_ir})\n");
             ir = call_name;
             is_final = true;
         }

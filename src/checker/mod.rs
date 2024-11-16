@@ -462,13 +462,13 @@ impl<'a> Checker<'a> {
             }
         };
 
-        let mut mdir_params: Vec<VecDeque<Expression>> = vec![];
+        let mut mdir_params: Vec<(VecDeque<Expression>, TypeValue)> = vec![];
 
         for (i, arg) in args.iter().enumerate() {
             let (param_name, param_type) = &params[i];
             let (arg_expr, arg_type) = self.expr_ty(arg);
 
-            mdir_params.push(arg_expr.into());
+            mdir_params.push((arg_expr.into(), param_type.clone()));
 
             let doesnt_match = match (param_type, &arg_type) {
                 (TypeValue::Ptr(a), b) => {

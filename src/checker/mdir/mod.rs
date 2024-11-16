@@ -162,7 +162,7 @@ impl Expression {
 #[derive(Debug)]
 pub enum Literal {
     Int(TypeValue, String),
-    Call(TypeValue, String, Vec<VecDeque<Expression>>),
+    Call(TypeValue, String, Vec<(VecDeque<Expression>, TypeValue)>),
     // type, value, is_function_parameter
     Identifier(TypeValue, String, bool),
     String(String),
