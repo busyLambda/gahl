@@ -275,10 +275,16 @@ fn literal_to_llvm_ir(
                 is_final = true;
             }
             _ => {
-                let param_name = format!("%{value}_load_{context}_{i}");
                 let ty = type_value_to_llvm_ir(ty);
-                result += &format!("    {param_name} = load ptr, {ty}* %{value}\n");
-                ir = param_name;
+                let value_clone = format!("%{value}_clone_{context}_{i}\n").trim().to_string();
+                result += &format!("    {value_clone} = alloca {ty}\n");
+                result += &format!("    %{value}_cpy_clone_{i} = load ptr, ptr %{value}\n");
+                result += &format!("    call void @llvm.memcpy.p0.p0.i64(ptr align 4 {value_clone}, ptr align 4 %{value}_cpy_clone_{i}, i64 4, i1 false)\n");
+
+                result += &format!(
+                    "    {value_clone}_load_to_value = load i32, ptr {value_clone}, align 4\n"
+                );
+                ir = format!("{value_clone}_load_to_value");
                 is_final = true;
             }
         },
@@ -312,7 +318,7 @@ fn literal_to_llvm_ir(
         }
         Literal::Call(ret_ty, func_name, args) => {
             let ret_ty_ir = type_value_to_llvm_ir(ret_ty);
-            
+
             let args_ir = args
                 .iter()
                 .map(|(arg, arg_type_value)| {
@@ -326,21 +332,7 @@ fn literal_to_llvm_ir(
                         result += &format!("    {arg_clone} = alloca {ty}\n");
                         result += &format!("    %{name}_cpy_clone_{i} = load ptr, ptr %{name}\n");
                         result += &format!("    call void @llvm.memcpy.p0.p0.i64(ptr align 4 {arg_clone}, ptr align 4 %{name}_cpy_clone_{i}, i64 4, i1 false)\n");
-                        /*
-                        match _type {
-                            TypeValue::Ptr(subtype) => {
-                                let ty = type_value_to_llvm_ir(subtype);
-                                let arg_clone = format!("{arg_name}_clone");
-                                result += &format!("    %{arg_clone} = alloca ");
-                                result += &format!("    call void @llvm.memcpy.p0.p0.i64(ptr align 4 %{arg_clone}, ptr align 4 %6, i64 4, i1 false)");
-                            }
-                            ty => {
-                                let ty = type_value_to_llvm_ir(subtype);
-                                let arg_clone = format!("{arg_name}_clone");
-                                result += &format!("    %{arg_clone} = alloca ");
-                                result += &format!("    call void @llvm.memcpy.p0.p0.i64(ptr align 4 %{arg_clone}, ptr align 4 %6, i64 4, i1 false)");
-                            },
-                        }*/
+
                         if let TypeValue::Ptr(_inner_type) = arg_type_value {
                             format!("ptr {arg_name}_clone")
                         } else {
