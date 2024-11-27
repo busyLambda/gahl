@@ -2,7 +2,6 @@ use std::{
     collections::{HashMap, VecDeque},
     fs::File,
     io::Write,
-    os::unix::process::CommandExt,
     process::Command,
     sync::{
         atomic::{AtomicUsize, Ordering::SeqCst},
@@ -15,6 +14,31 @@ use crate::{
     ast::TypeValue,
     checker::mdir::{Expression, ExternFunction, Function, Literal, MiddleIR, Statement},
 };
+
+struct VarCounter {
+    count: u32,
+    var_mapping: HashMap<String, u32>,
+}
+
+impl VarCounter {
+    fn use_c(&mut self) -> u32 {
+        let result = self.count;
+        self.count += 1;
+        result
+    }
+
+    fn new(count: u32) -> Self {
+        VarCounter { count, var_mapping: HashMap::new() }
+    }
+    
+    fn insert(&mut self, name: String, id: u32) {
+        self.var_mapping.insert(name, id);
+    }
+    
+    fn get(&self, name: &String) -> u32 {
+        self.var_mapping.get(name).unwrap().clone()
+    }
+}
 
 pub fn compile(modules: HashMap<String, MiddleIR>, mut libs: Vec<String>, project_name: &String) {
     let results = thread::spawn(move || {
@@ -171,6 +195,8 @@ fn function_block_to_llvm_ir(
 ) -> String {
     let mut result = String::from("entry:\n");
 
+    let mut var_counter = VarCounter::new(0);
+
     if block.len() == 0 {
         return "    ret void\n".to_string();
     }
@@ -178,7 +204,8 @@ fn function_block_to_llvm_ir(
     for (i, stmt) in block.iter().enumerate() {
         match stmt {
             Statement::Expr(expr) => {
-                let (expr_ir, name, _type) = &expr_to_llvm_ir(expr, context, i, false);
+                let (expr_ir, name, _type) =
+                    &expr_to_llvm_ir(expr, context, i, false, &mut var_counter);
 
                 let ty = type_value_to_llvm_ir(return_type);
 
@@ -203,38 +230,41 @@ fn function_block_to_llvm_ir(
             }
             Statement::Var(var) => {
                 let context = &format!("{}_var", var.lhs);
-                let (expr_ir, name, _type) = &expr_to_llvm_ir(&var.rhs, context, i, true);
+                let (expr_ir, name, _type) =
+                    &expr_to_llvm_ir(&var.rhs, context, i, true, &mut var_counter);
                 let ty = type_value_to_llvm_ir(&var.ty);
 
                 result += "    ; var\n";
 
-                // println!("%{context} = alloca ptr");
-                // println!("%{context}_alloca_ptr = call ptr @GC_malloc(i64 8)");
-                // println!("store {ty} 0, {ty}* %{context}_alloca_ptr");
-                // println!("%{context}_alloca_load = load ptr, ptr %{context}");
+                let var_id = var_counter.use_c();
+                var_counter.insert(var.lhs.clone(), var_id);
+                result += &format!("    %{var_id} = alloca ptr\n",);
 
-                result += &format!("    %{} = alloca ptr\n", var.lhs);
-                result += &format!("    %{context}_alloca_ptr = call ptr @GC_malloc(i64 8)\n");
-                result += &format!("    store {ty} 0, {ty}* %{context}_alloca_ptr\n");
-                result += &format!("    %{context}_alloca_load = load ptr, ptr %{}\n", var.lhs);
+                // %{context}_alloca_ptr
+                let var_alloca_ptr_id = var_counter.use_c();
+                result += &format!("    %{var_alloca_ptr_id} = call ptr @GC_malloc(i64 8)\n");
+                result += &format!("    store {ty} 0, {ty}* %{var_alloca_ptr_id}\n");
+
+                // %{context}_alloca_load
+                let var_alloca_load_id = var_counter.use_c();
+                result += &format!("    %{var_alloca_load_id} = load ptr, ptr %{var_id}\n");
 
                 match name {
                     Some(name) => {
                         if &var.ty == &TypeValue::String {
-                            result += &format!("    %{} = {expr_ir}\n", var.lhs);
-                            result += &format!("    store {name}, ptr %{}\n", var.lhs);
+                            result += &format!("    %{var_id} = {expr_ir}\n");
+                            result += &format!("    store {name}, ptr %{var_id}\n");
                         } else {
                             // println!("store {ty} {name}, {ty} %{context}_alloca_load");
                             result += expr_ir;
-                            result +=
-                                &format!("    store {ty} {name}, ptr %{context}_alloca_load\n")
+                            result += &format!("    store {ty} {name}, ptr %{var_alloca_load_id}\n")
                             // result += &format!("    %{} = alloca {ty}\n", var.lhs);
                             // result += &format!("    store {ty} {name}, {ty}* %{}\n", var.lhs);
                         }
                     }
                     None => {
-                        result += &format!("    %{} = alloca {ty}\n", var.lhs);
-                        result += &format!("    store {ty} {expr_ir}, {ty}* %{}\n", var.lhs);
+                        result += &format!("    %{var_id} = alloca {ty}\n");
+                        result += &format!("    store {ty} {expr_ir}, {ty}* %{var_id}\n");
                     }
                 }
             }
@@ -255,6 +285,7 @@ fn literal_to_llvm_ir(
     i: usize,
     _type: &TypeValue,
     is_var: bool,
+    var_counter: &mut VarCounter,
 ) -> (String, String, bool) {
     let mut result = String::new();
     let mut ir = String::new();
@@ -269,22 +300,27 @@ fn literal_to_llvm_ir(
         Literal::Identifier(ty, value, false) => match ty {
             TypeValue::String => {
                 let ty = type_value_to_llvm_ir(ty);
-                let param_name = format!("%{value}_gep_{context}_{i}");
+                let param_name = format!("%{}", var_counter.use_c());
                 result += &format!("    {param_name} = getelementptr inbounds [14 x i8], [14 x i8]* %{value}, i32 0, i32 0\n");
                 ir = param_name;
                 is_final = true;
             }
             _ => {
                 let ty = type_value_to_llvm_ir(ty);
-                let value_clone = format!("%{value}_clone_{context}_{i}\n").trim().to_string();
+                let value_clone_id = var_counter.use_c();
+                let value_clone = format!("%{value_clone_id}");
                 result += &format!("    {value_clone} = alloca {ty}\n");
-                result += &format!("    %{value}_cpy_clone_{i} = load ptr, ptr %{value}\n");
-                result += &format!("    call void @llvm.memcpy.p0.p0.i64(ptr align 4 {value_clone}, ptr align 4 %{value}_cpy_clone_{i}, i64 4, i1 false)\n");
+                let value_cpy_clone_id = var_counter.use_c();
+                
+                let var_id = var_counter.get(&value);
+                result += &format!("    %{value_cpy_clone_id} = load ptr, ptr %{var_id}\n");
+                result += &format!("    call void @llvm.memcpy.p0.p0.i64(ptr align 4 {value_clone}, ptr align 4 %{value_cpy_clone_id}, i64 4, i1 false)\n");
 
+                let value_clone_load_to_value_id = var_counter.use_c();
                 result += &format!(
-                    "    {value_clone}_load_to_value = load i32, ptr {value_clone}, align 4\n"
+                    "    %{value_clone_load_to_value_id} = load i32, ptr {value_clone}, align 4\n"
                 );
-                ir = format!("{value_clone}_load_to_value");
+                ir = format!("%{value_clone_load_to_value_id}");
                 is_final = true;
             }
         },
@@ -306,13 +342,14 @@ fn literal_to_llvm_ir(
                 ir = format!("[{length} x i8] c{null_terminated}",);
                 is_final = true;
             } else {
-                let string_name = format!("%{context}_string_{i}");
+                let string_name = format!("%{}", var_counter.use_c());
                 result += &format!("    {string_name} = alloca [{length} x i8]\n");
                 result += &format!(
                     "    store [{length} x i8] c{null_terminated}, [{length} x i8]* {string_name}\n"
                 );
-                result += &format!("    {string_name}_ptr = getelementptr inbounds [{length} x i8], [{length} x i8]* {string_name}, i32 0, i32 0\n");
-                ir = format!("{string_name}_ptr");
+                let string_name_ptr_id = var_counter.use_c();
+                result += &format!("    %{string_name_ptr_id} = getelementptr inbounds [{length} x i8], [{length} x i8]* {string_name}, i32 0, i32 0\n");
+                ir = format!("%{string_name_ptr_id}");
                 is_final = true;
             }
         }
@@ -322,33 +359,40 @@ fn literal_to_llvm_ir(
             let args_ir = args
                 .iter()
                 .map(|(arg, arg_type_value)| {
-                    let (arg_ir, arg_name, arg_type) = expr_to_llvm_ir(arg, context, i, false);
+                    let (arg_ir, arg_name, arg_type) = expr_to_llvm_ir(arg, context, i, false, var_counter);
                     result += &arg_ir;
                     if let Expression::Literal(Literal::Identifier(_type, name, _)) = &arg[0] {
                         let arg_name = arg_name.unwrap();
 
                         let ty = type_value_to_llvm_ir(_type);
-                        let arg_clone = format!("{arg_name}_clone\n");
-                        result += &format!("    {arg_clone} = alloca {ty}\n");
-                        result += &format!("    %{name}_cpy_clone_{i} = load ptr, ptr %{name}\n");
-                        result += &format!("    call void @llvm.memcpy.p0.p0.i64(ptr align 4 {arg_clone}, ptr align 4 %{name}_cpy_clone_{i}, i64 4, i1 false)\n");
+
+                        let arg_clone_id = var_counter.use_c();
+                        result += &format!("    %{arg_clone_id} = alloca {ty}\n");
+                        
+                        let name_cpy_clone_id = var_counter.use_c();
+                        
+                        let name_id = var_counter.get(name);
+                        result += &format!("    %{name_cpy_clone_id} = load ptr, ptr %{name_id}\n");
+                        result += &format!("    call void @llvm.memcpy.p0.p0.i64(ptr align 4 %{arg_clone_id}, ptr align 4 %{name_cpy_clone_id}, i64 4, i1 false)\n");
 
                         if let TypeValue::Ptr(_inner_type) = arg_type_value {
-                            format!("ptr {arg_name}_clone")
+                            format!("ptr %{arg_clone_id}")
                         } else {
-                            result += &format!("    {arg_name}_load_to_value = load i32, ptr {arg_name}_clone, align 4\n");
-                            format!("{ty} {arg_name}_load_to_value")
+                            let arg_name_load_to_value_id = var_counter.use_c();
+                            result += &format!("    %{arg_name_load_to_value_id} = load i32, ptr %{arg_clone_id}, align 4\n");
+                            format!("{ty} %{arg_name_load_to_value_id}")
                         }
                     } else {
+                        // TODO: Find out why this is here, I forgor...
                         format!("{arg_type} {}", arg_name.unwrap())
                     }
                 })
                 .collect::<Vec<String>>()
                 .join(", ");
 
-            let call_name = format!("%{context}_call_{i}");
-            result += &format!("    {call_name} = call {ret_ty_ir} @{func_name}({args_ir})\n");
-            ir = call_name;
+            let call_id = var_counter.use_c();
+            result += &format!("    %{call_id} = call {ret_ty_ir} @{func_name}({args_ir})\n");
+            ir = format!("%{call_id}");
             is_final = true;
         }
     }
@@ -361,6 +405,7 @@ fn expr_to_llvm_ir(
     context: &String,
     i: usize,
     is_var: bool,
+    var_counter: &mut VarCounter,
 ) -> (String, Option<String>, String) {
     let mut result = String::new();
     let mut prev_name: Option<String> = None;
@@ -371,12 +416,12 @@ fn expr_to_llvm_ir(
 
     if expr.len() == 1 {
         if let Expression::Literal(rhs) = &expr[0] {
-            let final_name = format!("%{}_expr_{}", context, i + 1);
+            let final_name = format!("%{}", var_counter.use_c());
 
             let _type = type_value_to_llvm_ir(rhs._type()).to_string();
 
             let (in_ir, expr_ir, is_final) =
-                literal_to_llvm_ir(rhs, context, i + 1, rhs._type(), is_var);
+                literal_to_llvm_ir(rhs, context, i + 1, rhs._type(), is_var, var_counter);
 
             result += &in_ir;
             if is_final {
@@ -399,7 +444,7 @@ fn expr_to_llvm_ir(
                 use Expression as E;
 
                 if let (E::Literal(lhs), E::Literal(rhs)) = (lhs, rhs) {
-                    let final_name = format!("%{}_expr_{}", context, i);
+                    let final_name = format!("%{}", var_counter.use_c());
                     i += 1;
                     let _type = type_value_to_llvm_ir(lhs._type());
                     final_type = lhs._type();
@@ -407,11 +452,11 @@ fn expr_to_llvm_ir(
                     let rhs_type = rhs._type();
 
                     let (in_ir, rhs_ir, _is_final) =
-                        literal_to_llvm_ir(rhs, context, i, rhs_type, is_var);
+                        literal_to_llvm_ir(rhs, context, i, rhs_type, is_var, var_counter);
                     result += &in_ir;
 
                     let (in_ir, lhs_ir, _is_final) =
-                        literal_to_llvm_ir(lhs, context, i, lhs_type, is_var);
+                        literal_to_llvm_ir(lhs, context, i, lhs_type, is_var, var_counter);
                     result += &in_ir;
 
                     result += &format!(
@@ -433,7 +478,7 @@ fn expr_to_llvm_ir(
                     let _type = type_value_to_llvm_ir(rhs_type);
 
                     let (in_ir, rhs_ir, _is_final) =
-                        literal_to_llvm_ir(rhs, context, i, rhs_type, is_var);
+                        literal_to_llvm_ir(rhs, context, i, rhs_type, is_var, var_counter);
                     result += &in_ir;
 
                     result += &format!(
