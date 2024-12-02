@@ -229,9 +229,6 @@ fn function_block_to_llvm_ir(
                 }
             }
             Statement::Var(var) => {
-                let context = &format!("{}_var", var.lhs);
-                let (expr_ir, name, _type) =
-                    &expr_to_llvm_ir(&var.rhs, context, i, true, &mut var_counter);
                 let ty = type_value_to_llvm_ir(&var.ty);
 
                 result += "    ; var\n";
@@ -249,6 +246,8 @@ fn function_block_to_llvm_ir(
                 let var_alloca_load_id = var_counter.use_c();
                 result += &format!("    %{var_alloca_load_id} = load ptr, ptr %{var_id}\n");
 
+                let (expr_ir, name, _type) =
+                    &expr_to_llvm_ir(&var.rhs, context, i, true, &mut var_counter);
                 match name {
                     Some(name) => {
                         if &var.ty == &TypeValue::String {
@@ -362,7 +361,7 @@ fn literal_to_llvm_ir(
                     let (arg_ir, arg_name, arg_type) = expr_to_llvm_ir(arg, context, i, false, var_counter);
                     result += &arg_ir;
                     if let Expression::Literal(Literal::Identifier(_type, name, _)) = &arg[0] {
-                        let arg_name = arg_name.unwrap();
+                        // let arg_name = arg_name.unwrap();
 
                         let ty = type_value_to_llvm_ir(_type);
 
