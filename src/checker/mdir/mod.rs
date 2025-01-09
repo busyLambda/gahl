@@ -52,6 +52,7 @@ pub struct Function {
     pub name: String,
     pub params: Vec<(String, TypeValue)>,
     pub return_type: TypeValue,
+    pub vars: Vec<(String, TypeValue)>,
     pub block: Vec<Statement>,
     pub doc_comments: Vec<DocComment>,
 }
@@ -62,6 +63,7 @@ impl Function {
             name: String::new(),
             params: vec![],
             return_type: TypeValue::Void,
+            vars: vec![],
             block: vec![],
             doc_comments: vec![],
         }

@@ -244,6 +244,11 @@ impl<'a> Checker<'a> {
 
         func_node.block.iter().for_each(|stmt| {
             let stmt = self.stmt_ty(stmt);
+            
+            if let Statement::Var(var) = &stmt {
+                function.vars.push((var.lhs.clone(), var.ty.clone()));
+            }
+
             function.block.push(stmt);
         });
 

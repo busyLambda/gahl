@@ -7,6 +7,7 @@ use crate::parser::error::ParseError;
 pub enum Stmt {
     Expr(Expr, Vec<ParseError>),
     Var(Var),
+    Enum(EnumDecl),
     DocComment(DocComment),
 }
 
@@ -112,6 +113,8 @@ pub enum TypeValue {
     Generic(Box<TypeValue>),
     Func(Vec<TypeValue>, Box<TypeValue>, bool),
     ExFunc((Vec<(String, TypeValue)>, Box<TypeValue>)),
+    Custom(String), // TODO: Make Name or something like it.
+    EnumVariant(String),
 }
 
 #[derive(Debug)]
@@ -277,6 +280,9 @@ pub enum ImportKey {
     Symbol(String),
     Module(String),
 }
+
+#[derive(Debug)]
+pub struct EnumDecl(pub Vec<(String, Vec<TypeValue>)>);
 
 #[derive(Debug)]
 pub struct Module {
