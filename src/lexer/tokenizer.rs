@@ -44,6 +44,7 @@ impl Lexer {
             '-' => self.min_or_right_arrow(),
             '*' => TokenKind::Mul,
             '/' => TokenKind::Div,
+            '|' => TokenKind::Pipe,
             '%' => TokenKind::Mod,
             '^' => TokenKind::Caret,
             '[' => TokenKind::OpenBracket,

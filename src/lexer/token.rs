@@ -48,6 +48,7 @@ pub enum TokenKind {
     KwEnum,
 
     // Funnies
+    Pipe,
     Dot,
     At,
     Comma,
