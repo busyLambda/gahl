@@ -1,7 +1,7 @@
 use crate::{
     ast::{DocComment, Expr, Stmt},
     lexer::{token::TokenKind as TK, Lexer},
-    parser::{expr::expression, var::var},
+    parser::{expr::expression, struct_enum::parse_enum, var::var},
 };
 
 use super::{
@@ -34,6 +34,10 @@ pub fn stmt(input: &mut Input) -> Option<(Stmt, bool)> {
         TK::DocComment => {
             let doc_comment = input.eat().unwrap().literal();
             Some((Stmt::DocComment(DocComment { md: doc_comment }), false))
+        }
+        TK::KwEnum => {
+            let (_enum, error, is_eof) = parse_enum(input);
+            Some((Stmt::Enum(_enum), is_eof))
         }
         k => {
             // TODO: Report error

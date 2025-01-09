@@ -1,6 +1,6 @@
 use crate::{
     ast::{Expr, FuncNode, Location},
-    lexer::{token::TokenKind as TK, Lexer},
+    lexer::token::TokenKind as TK,
     parser::{error::ParseError, name::name},
 };
 
@@ -311,7 +311,7 @@ pub fn function_expr(input: &mut Input) -> ParseResult<FuncNode> {
                 return (product, vec![], is_eof);
             }
         }
-        Some(t) => todo!(),
+        Some(_t) => todo!(),
         None => return (product, vec![], true),
     };
 
@@ -333,7 +333,7 @@ fn separated_exprs(input: &mut Input) -> ParseResult<Vec<Expr>> {
             Some(t) if is_multi_expr && t.kind() == TK::Comma => {
                 input.eat();
             }
-            Some(t) if is_multi_expr => {
+            Some(_t) if is_multi_expr => {
                 // TODO: Report error relating to expecting `)` or `,`
                 todo!()
             }
@@ -350,7 +350,7 @@ fn separated_exprs(input: &mut Input) -> ParseResult<Vec<Expr>> {
                     // Report error here...
                     return (product, errors, true);
                 }
-                Some(t) => (),
+                Some(_t) => (),
             }
         }
 

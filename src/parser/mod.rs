@@ -4,7 +4,6 @@ use std::{
     io::Read,
     ops::Range,
     path::Path,
-    process::exit,
     sync::{
         atomic::{AtomicUsize, Ordering::SeqCst},
         mpsc::{channel, Sender, TryRecvError},
@@ -32,6 +31,7 @@ pub mod import;
 pub mod name;
 pub mod stmt;
 pub mod var;
+pub mod struct_enum;
 
 pub struct Parser {
     name: String,
@@ -129,10 +129,6 @@ impl Parser {
                         });
                     }
                     Err(TryRecvError::Empty) => {
-                        // let task_counter_c_loaded = task_counter_c.clone().load(SeqCst);
-                        // let block_counter_c_loaded = block_counter_c.clone().load(SeqCst);
-
-                        // println!("State:\n\t- task_counter: {task_counter_c_loaded}\n\t- block_counter: {block_counter_c_loaded}");
                         if (task_counter_c.clone().load(SeqCst) == 0)
                             && (block_counter_c.clone().load(SeqCst) == 0)
                         {
@@ -154,14 +150,11 @@ impl Parser {
             .send((name, main_task_sender.clone()))
             .unwrap();
 
-        // println!("Main sent ☑️");
-
         let bc_clone = block_counter.clone();
         thread::spawn(move || loop {
             match main_task_receiver.try_recv() {
                 Ok(_) => {
                     bc_clone.fetch_sub(1, SeqCst);
-                    // println!("SUB!");
                     break;
                 }
                 Err(TryRecvError::Empty) => continue,

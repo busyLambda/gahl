@@ -1,5 +1,7 @@
 use crate::{
-    ast::{Location, Type, TypeValue}, checker::mdir::ExternFunction, lexer::{token::TokenKind as TK, Lexer}, parser::error::ParseError
+    ast::{Location, Type, TypeValue},
+    lexer::token::TokenKind as TK,
+    parser::error::ParseError,
 };
 
 use super::{error::ParseResult, Input};
@@ -168,7 +170,7 @@ pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
                         Some(t) => {
                             println!("t: {:?}", t);
                             todo!()
-                        },
+                        }
                         None => todo!(),
                     }
                 }
@@ -178,7 +180,7 @@ pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
                         Some(t) if t.kind() == TK::Identifier => {
                             named_params.push(input.eat().unwrap().literal());
                         }
-                        Some(t) => todo!(),
+                        Some(_t) => todo!(),
                         None => todo!(),
                     }
 
@@ -186,7 +188,7 @@ pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
                         Some(t) if t.kind() == TK::Column => {
                             input.eat();
                         }
-                        Some(t) => todo!(),
+                        Some(_t) => todo!(),
                         None => todo!(),
                     }
                 }
@@ -212,14 +214,14 @@ pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
 
     let type_value = if is_extern {
         let mut final_params: Vec<(String, TypeValue)> = vec![];
-        
+
         for i in 0..named_params.len() {
             let name = named_params[i].clone();
             let _type = params[i].clone();
-            
+
             final_params.push((name, _type));
         }
-        
+
         let extern_function = (final_params, Box::new(return_ty));
 
         TypeValue::ExFunc(extern_function)
@@ -229,20 +231,6 @@ pub fn function_type(input: &mut Input) -> ParseResult<TypeValue> {
 
     (type_value, errors, is_eof)
 }
-
-// #[test]
-// fn test_function_type_parser() {
-//     let input = "fn (i32) void";
-//     let mut lexer = Lexer::new(input);
-//     let tokens = lexer.lex();
-//     let mut input = Input::new(tokens);
-
-//     let (_type, errors, is_eof) = _type(&mut input);
-//     assert_eq!(errors.len(), 0);
-//     assert_eq!(is_eof, false);
-
-//     println!("{:?}", _type);
-// }
 
 pub fn array_type(input: &mut Input) -> ParseResult<TypeValue> {
     let mut errors: Vec<ParseError> = vec![];
@@ -277,15 +265,3 @@ pub fn array_type(input: &mut Input) -> ParseResult<TypeValue> {
 
     (product, errors, false)
 }
-
-// #[test]
-// fn test_type_parser() {
-//     let input = "[i32]";
-//     let mut lexer = Lexer::new(input);
-//     let tokens = lexer.lex();
-//     let mut input = Input::new(tokens);
-
-//     let (_type, errors, is_eof) = _type(&mut input);
-//     assert_eq!(errors.len(), 0);
-//     assert_eq!(is_eof, false);
-// }

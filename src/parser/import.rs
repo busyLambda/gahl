@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     ast::{Import, ImportKey, Imports, Location},
-    lexer::token::{Span, TokenKind as TK},
+    lexer::token::TokenKind as TK,
 };
 
 use super::{
